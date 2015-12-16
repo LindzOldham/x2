@@ -1,0 +1,217 @@
+import numpy,pyfits,pylab
+import indexTricks as iT
+from pylens import MassModels,pylens,adaptTools as aT,pixellatedTools as pT
+from imageSim import SBModels,convolve
+from scipy.sparse import diags
+import pymc,cPickle
+from scipy import optimize
+import updateEmcee as myEmcee
+import numpy as np, pylab as pl
+from pylens import lensModel
+
+img = pyfits.open('/data/ljo31/Lens/J1605/SDSSJ1605+3811_F555W_sci_cutout2.fits')[0].data.copy()
+sig = pyfits.open('/data/ljo31/Lens/J1605/SDSSJ1605+3811_F555W_noisemap2_masked.fits')[0].data.copy() # masking out the possiblyasecondsource regions!
+psf = pyfits.open('/data/ljo31/Lens/J1605/SDSSJ1605+3811_F555W_psf.fits')[0].data.copy()
+psf = psf[10:-10,10:-10]
+psf = psf/np.sum(psf)
+
+det = np.load('/data/ljo31/Lens/J1605/det10.npy')[()] # this has the galaxies and sources coincident in space.
+srcs = []
+gals = []
+lenses = []
+coeff=[]
+g1,g2,l1,s1,s2,sh = {},{},{},{},{},{}
+for name in det.keys():
+    s = det[name]
+    coeff.append(s[-1])
+    if name[:8] == 'Source 1':
+        s1[name[9:]] = s[-1]
+    elif name[:8] == 'Source 2':
+        s2[name[9:]] = s[-1]
+    elif name[:6] == 'Lens 1':
+        l1[name[7:]] = s[-1]
+    elif name[:8] == 'Galaxy 1':
+        g1[name[9:]] = s[-1]
+    elif name[:8] == 'Galaxy 2':
+        g2[name[9:]] = s[-1]
+    elif name[:8] == 'extShear':
+        if len(name)<9:
+            sh['b'] = s[-1]
+        elif name == 'extShear PA':
+            sh['pa'] = s[-1]
+    
+s2['x'] = s1['x'].copy()
+s2['y'] = s1['y'].copy()
+g2['x'] = g1['x'].copy()
+g2['y'] = g1['y'].copy()
+srcs.append(SBModels.Sersic('Source 1',s1))
+srcs.append(SBModels.Sersic('Source 2',s2))
+gals.append(SBModels.Sersic('Galaxy 1',g1))
+gals.append(SBModels.Sersic('Galaxy 2',g2))
+lenses.append(MassModels.PowerLaw('Lens 1',l1))
+sh['x'] = lenses[0].pars['x']
+sh['y'] = lenses[0].pars['y']
+lenses.append(MassModels.ExtShear('shear',sh))
+
+outFile = '/data/ljo31/Lens/J1605/pixsrc'
+mask = pyfits.open('/data/ljo31/Lens/J1605/mask.fits')[0].data.copy()
+mask = mask==1
+
+Npnts = 2  # Defines `fineness' of source reconstruction (bigger is coarser)
+
+# Function to make a `nice' plot
+def showRes(x,y,src,psf,img,sig,mask,iflt,vflt,cmat,reg,niter,npix):
+    oy,ox = iT.coords((npix,npix))
+    oy -= oy.mean()
+    ox -= ox.mean()
+    span = max(x.max()-x.min(),y.max()-y.min())
+    oy *= span/npix
+    ox *= span/npix
+    ox += x.mean()
+    oy += y.mean()
+    lmat = psf*src.lmat
+    rmat = src.rmat
+    res,fit,model,rhs,regg = aT.getModelG(iflt,vflt,lmat,cmat,rmat,reg,niter=niter)
+
+    osrc = src.eval(ox.ravel(),oy.ravel(),fit).reshape(ox.shape)
+
+    oimg = img*numpy.nan
+    oimg[mask] = (lmat*fit)
+
+    ext = [0,img.shape[1],0,img.shape[0]]
+    ext2 = [x.mean()-span/2.,x.mean()+span/2.,y.mean()-span/2.,y.mean()+span/2.]
+    pylab.figure()
+    pylab.subplot(221)
+    img[~mask] = numpy.nan
+    pylab.imshow(img,origin='lower',interpolation='nearest',extent=ext)
+    pylab.colorbar()
+    pylab.subplot(222)
+    pylab.imshow(oimg,origin='lower',interpolation='nearest',extent=ext)
+    pylab.colorbar()
+    pylab.subplot(223)
+    pylab.imshow((img-oimg)/sig,origin='lower',interpolation='nearest',extent=ext)
+    pylab.colorbar()
+    pylab.subplot(224)
+    pylab.imshow(osrc,origin='lower',interpolation='nearest',extent=ext2)
+    pylab.colorbar()
+    return osrc
+
+
+# Setup data for adaptive source modelling
+cpsf = convolve.convolve(img,psf)[1]
+y,x = iT.coords(img.shape)
+model = lensModel.lensFit(None,img,sig,gals,lenses,srcs,x-15,y-15,1,noResid=True,psf=cpsf,verbose=True,getModel=True,showAmps=True)
+galaxy = model[0] + model[1]
+img = img - galaxy
+pl.figure()
+pl.imshow(img,origin='lower',interpolation='nearest')
+
+ifltm = img[mask]
+sfltm = sig[mask]
+vfltm = sfltm**2
+cmatm = diags(1./sfltm,0)
+xm = x[mask]
+ym = y[mask]
+coords = [xm,ym]
+
+PSF = pT.getPSFMatrix(psf,img.shape)
+PSFm = pT.maskPSFMatrix(PSF,mask)
+
+iflt = img.flatten()
+sflt = sig.flatten()
+vflt = sflt**2
+
+xflt = x.flatten()
+yflt = y.flatten()
+
+src = aT.AdaptiveSource(ifltm/sfltm,ifltm.size/Npnts)
+
+xl,yl = pylens.getDeflections(lenses,coords)
+src.update(xl,yl)
+osrc = showRes(xl,yl,src,PSFm,img,sig,mask,ifltm,vfltm,cmatm,1,10,400)
+pylab.show()
+
+
+reg = 1.
+previousResult = None
+## now fit
+import time
+def doFit(p=None,doReg=True,updateReg=True,checkImgs=True,levMar=False):
+    global reg
+    # Check if using levMar-style parameters
+    if p is not None:
+        for i in range(len(p)):
+            pars[i].value = p[i]
+            # If the parameter is out-of-bounds return a bad fit
+            try:
+                a = pars[i].logp
+            except:
+                return iflt/sflt
+
+    for l in lenses:
+        l.setPars()
+    xl,yl = pylens.getDeflections(lenses,coords)
+
+    src.update(xl,yl,doReg=doReg)
+    lmat = PSFm*src.lmat
+    if doReg==True:
+        rmat = src.rmat
+    else:
+        rmat = None
+    nupdate = 0
+    if doReg==True and updateReg==True:
+        nupdate = 10
+    res,fit,model,_,regg = aT.getModelG(ifltm,vfltm,lmat,cmatm,rmat,reg,nupdate)
+    reg = regg[0]
+    if checkImgs is False:
+        if levMar:
+            res = res**0.5+ifltm*0.
+        return -0.5*res
+    # This checks is images are formed outside of the masked region
+    xl,yl = pylens.getDeflections(lenses,[xflt,yflt])
+    oimg,pix = src.eval(xl,yl,fit,domask=False)
+    oimg = PSF*oimg
+    res = (iflt-oimg)/sflt
+    if levMar:
+        return res
+    return -0.5*(res**2).sum()
+
+
+@pymc.observed
+def likelihood(value=0.,tmp=pars):
+    return doFit(None,True,False,True,False)
+
+cov = numpy.array(cov)
+if previousResult is not None:
+    result = numpy.load(previousResult)
+    lp = result[0]
+    trace = numpy.array(result[1])
+    a1,a2 = numpy.unravel_index(lp.argmax(),lp.shape)
+    for i in range(len(pars)):
+        pars[i].value = trace[a1,a2,i]
+    ns,nw,np = trace.shape
+    cov = numpy.cov(trace[ns/2:].reshape((ns*nw/2,np)).T)
+
+print 'about to do doFit'
+
+doFit(None,True,True,False)
+doFit(None,True,True,False)
+
+print 'done doFit'
+
+xl,yl = pylens.getDeflections(lenses,coords)
+src.update(xl,yl)
+osrc = showRes(xl,yl,src,PSFm,img,sig,mask,ifltm,vfltm,cmatm,reg,10,400)
+pylab.show()
+
+start = [i.value for i in pars]
+result = optimize.leastsq(doFit,start,args=(True,True,True,True))[0]
+for i in range(len(pars)):
+    pars[i].value = result[i]
+print start
+print result
+
+xl,yl = pylens.getDeflections(lenses,coords)
+src.update(xl,yl)
+osrc = showRes(xl,yl,src,PSFm,img,sig,mask,ifltm,vfltm,cmatm,reg,10,400)
+pylab.show()

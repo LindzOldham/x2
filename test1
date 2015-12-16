@@ -1,0 +1,44 @@
+@pymc.deterministic
+def logP(value=0.,p=pars):
+    lp = 0.
+    models = []
+    for i in range(len(imgs)):
+        if i == 0:
+            dx,dy = 0,0
+        else:
+            dx = pars[0].value 
+            dy = pars[1].value 
+        xp,yp = xc+dx,yc+dy
+        image = imgs[i]
+        sigma = sigs[i]
+        psf = PSFs[i]
+        imin,sigin,xin,yin = image[mask], sigma[mask],xp[mask2],yp[mask2]
+        n = 0
+        model = np.empty(((len(gals) + len(srcs)),imin.size))
+        for gal in gals:
+            gal.setPars()
+            tmp = xc*0.
+            tmp[mask2] = gal.pixeval(xin,yin,1./OVRS,csub=1) # evaulate on the oversampled grid. OVRS = number of new pixels per old pixel.
+            tmp = iT.resamp(tmp,OVRS,True) # convert it back to original size
+            tmp = convolve.convolve(tmp,psf,False)[0]
+            model[n] = tmp[mask].ravel()
+            n +=1
+        for lens in lenses:
+            lens.setPars()
+        x0,y0 = pylens.lens_images(lenses,srcs,[xin,yin],1./OVRS,getPix=True)
+        for src in srcs:
+            src.setPars()
+            tmp = xc*0.
+            tmp[mask2] = src.pixeval(x0,y0,1./OVRS,csub=1)
+            tmp = iT.resamp(tmp,OVRS,True)
+            tmp = convolve.convolve(tmp,psf,False)[0]
+            model[n] = tmp[mask].ravel()
+            n +=1
+        rhs = (imin/sigin) # data
+        op = (model/sigin).T # model matrix
+        fit, chi = optimize.nnls(op,rhs)
+        model = (model.T*fit).sum(1)
+        resid = (model-imin)/sigin
+        lp += -0.5*(resid**2.).sum()
+        models.append(model)
+    return lp #,models

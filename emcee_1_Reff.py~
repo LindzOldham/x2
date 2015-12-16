@@ -1,0 +1,182 @@
+import cPickle,numpy,pyfits
+import pymc
+from pylens import *
+from imageSim import SBModels,convolve
+import indexTricks as iT
+import pylab as pl
+import numpy as np
+import lensModel2
+
+def NotPlicely(image,im,sigma):
+    ext = [0,image.shape[0],0,image.shape[1]]
+    #vmin,vmax = numpy.amin(image), numpy.amax(image)
+    pl.figure()
+    pl.subplot(221)
+    pl.imshow(image,origin='lower',interpolation='nearest',extent=ext,cmap='afmhot',aspect='auto') #,vmin=vmin,vmax=vmax)
+    pl.colorbar()
+    pl.title('data')
+    pl.subplot(222)
+    pl.imshow(im,origin='lower',interpolation='nearest',extent=ext,cmap='afmhot',aspect='auto') #,vmin=vmin,vmax=vmax)
+    pl.colorbar()
+    pl.title('model')
+    pl.subplot(223)
+    #pl.imshow((image-im)/sigma,origin='lower',interpolation='nearest',extent=ext,vmin=-3,vmax=3,cmap='afmhot',aspect='auto')
+    #pl.colorbar()
+    #pl.title('signal-to-noise residuals 1')
+    pl.imshow((image-im),origin='lower',interpolation='nearest',extent=ext,vmin=-0.25,vmax=0.25,cmap='afmhot',aspect='auto')
+    pl.colorbar()
+    pl.title('data-model')
+    #pl.colorbar()
+    #pl.title('signal-to-noise residuals 1')
+    pl.subplot(224)
+    pl.imshow((image-im)/sigma,origin='lower',interpolation='nearest',extent=ext,vmin=-3,vmax=3,cmap='afmhot',aspect='auto')
+    pl.title('signal-to-noise residuals 2')
+    pl.colorbar()
+
+
+result = np.load('/data/ljo31/Lens/J1347/emcee_1.npy')
+lp= result[0]
+a1,a2,a3 = numpy.unravel_index(lp.argmax(),lp.shape)
+trace = result[1]
+
+dx,dy,x1,y1,q1,re1,n1,pa1,q2,re2,n2,pa2,x3,y3,q3,pa3,re3,n3,x4,y4,q4,pa4,b,eta,shear,shearpa = trace[a1,a2,a3,:]
+srcs,gals,lenses = [],[],[]
+srcs.append(SBModels.Sersic('Source 1', {'x':x1,'y':y1,'q':q1,'pa':pa1,'re':re1,'n':n1}))
+srcs.append(SBModels.Sersic('Source 2', {'x':x1,'y':y1,'q':q2,'pa':pa2,'re':re2,'n':n2}))
+gals.append(SBModels.Sersic('Galaxy 1', {'x':x3,'y':y3,'q':q3,'pa':pa3,'re':re3,'n':n3}))
+lenses.append(MassModels.PowerLaw('Lens 1', {'x':x4,'y':y4,'q':q4,'pa':pa4,'b':b,'eta':eta}))
+lenses.append(MassModels.ExtShear('shear',{'x':x4,'y':y4,'b':shear, 'pa':shearpa}))
+
+
+img1 = pyfits.open('/data/ljo31/Lens/J1347/SDSSJ1347-0101_F606W_sci_cutout.fits')[0].data.copy()
+sig1 = pyfits.open('/data/ljo31/Lens/J1347/SDSSJ1347-0101_F606W_noisemap.fits')[0].data.copy()
+psf1 = pyfits.open('/data/ljo31/Lens/J1347/SDSSJ1347-0101_F606W_psf.fits')[0].data.copy()
+psf1 = psf1[15:-15,15:-15]
+psf1 /= psf1.sum()
+
+img2 = pyfits.open('/data/ljo31/Lens/J1347/SDSSJ1347-0101_F814W_sci_cutout.fits')[0].data.copy()
+sig2 = pyfits.open('/data/ljo31/Lens/J1347/SDSSJ1347-0101_F814W_noisemap.fits')[0].data.copy()
+psf2 = pyfits.open('/data/ljo31/Lens/J1347/SDSSJ1347-0101_F814W_psf_#2.fits')[0].data.copy()
+psf2 = psf2[15:-15,15:-16]
+psf2 /= psf2.sum()
+
+imgs = [img1,img2]
+sigs = [sig1,sig2]
+psfs = [psf1,psf2]
+
+OVRS = 10 #4
+yc,xc = iT.overSample(img1.shape,OVRS)
+
+source0 = srcs[0].pixeval(xc,yc,1./OVRS)
+source1 = srcs[1].pixeval(xc,yc,1./OVRS)
+
+PSFs = []
+OVRS = 10 #4
+yc,xc = iT.overSample(img1.shape,OVRS)
+yc,xc = yc,xc
+for i in range(len(imgs)):
+    psf = psfs[i]
+    image = imgs[i]
+    psf /= psf.sum()
+    psf = convolve.convolve(image,psf)[1]
+    PSFs.append(psf)
+
+
+fits = []
+for i in range(len(imgs)):
+        if i == 0:
+            x0,y0 = 0,0
+        else:
+            x0 = dx
+            y0 = dy
+        image = imgs[i]
+        sigma = sigs[i]
+        psf = PSFs[i]
+        fits.append(lensModel2.lensFit(None,image,sigma,gals,lenses,srcs,xc+x0,yc+y0,OVRS,verbose=False,psf=psf,csub=1,showAmps=True))
+
+print fits
+
+source0 = source0 * fits[0][1]
+source1 = source1 * fits[0][2]
+
+source = source0 + source1
+#print source
+#print source.shape
+#print np.ravel(source)
+'''
+pl.figure()
+pl.imshow(source,interpolation='nearest',aspect='auto',cmap='afmhot',origin='lower')
+pl.colorbar()
+pl.figure()
+pl.imshow(source0,interpolation='nearest',aspect='auto',cmap='afmhot',origin='lower')
+pl.colorbar()
+pl.figure()
+pl.imshow(source1,interpolation='nearest',aspect='auto',cmap='afmhot',origin='lower')
+pl.colorbar()
+'''
+R = np.sqrt((xc-x1)**2. + (yc-y1)**2.)
+pl.figure()
+source,R = np.ravel(source), np.ravel(R)
+sort = R.argsort()
+pl.plot(R[sort],source[sort])
+R,source = R[sort], source[sort]
+
+from scipy.interpolate import splrep, splint, splev
+lights = source*2.*np.pi*R
+mod = splrep(R,lights,t=np.linspace(0.108,52,100))
+
+intlight = np.zeros(len(R))
+for i in range(len(R)):
+    intlight[i] = splint(0,R[i],mod)
+    
+model = splrep(intlight,R)
+reff = splev(0.5*intlight[-1],model)
+print reff
+reff = reff*0.05*6.915
+print reff
+
+# make some plots to demonstrate this
+pl.figure()
+pl.plot(R*0.05*6.915,intlight,'k')
+pl.plot(reff,intlight[-1]/2.,'b*')
+pl.xlabel('R/kpc')
+pl.ylabel('integrated flux /counts')
+pl.title('half-light radius for J1347')
+#mod = splrep(R,source,t=np.logspace(np.log10(0.108), np.log10(52),100)
+
+header = pyfits.open('/data/ljo31/Lens/J1347/SDSSJ1347-0101_F606W_sci.fits')[0].header
+header814 = pyfits.open('/data/ljo31/Lens/J1347/SDSSJ1347-0101_F814W_sci.fits')[0].header
+
+plam,flam = header['PHOTPLAM'],header['PHOTFLAM']
+ZP = -2.5*np.log10(flam) - 5*np.log10(plam) - 2.408
+wl = 6060
+f_nu = intlight[-1] * plam * (wl)**2/(3e8)
+mag = -2.5*np.log10(f_nu) - ZP
+
+## galaxy
+galmag606, galmag814 = gals[0].getMag(fits[0][0],26.5), gals[0].getMag(fits[1][0],25.95)
+src1mag606, src1mag814 = srcs[0].getMag(fits[0][1],26.5), srcs[0].getMag(fits[1][1],25.95)
+src2mag606,src2mag814 = srcs[1].getMag(fits[0][2],26.5), srcs[1].getMag(fits[1][2],25.95)
+src606mag = 24.5
+
+# check galaxy
+re,n = re3,n3
+k = 2.*n-1./3+4./(405.*n)+46/(25515.*n**2)
+from scipy.special import gamma
+amp = fits[0][0]
+cnts = (re**2)*amp*exp(k)*n*(k**(-2*n))*gamma(2*n)*2*pi
+
+
+# F814W image
+source0 = srcs[0].pixeval(xc,yc,1./OVRS)
+source1 = srcs[1].pixeval(xc,yc,1./OVRS)
+source = source0*fits[1][1] + source1*fits[1][2]
+xc,yc = xc+dx,yc+dy
+R = np.sqrt((xc-x1)**2. + (yc-y1)**2.)
+light = source*2.*np.pi*R
+R,light = np.ravel(R), np.ravel(light)
+sort = R.argsort()
+R,light = R[sort],light[sort]
+model = splrep(R,light)
+intlight = splint(0,60,model)
+f_nu = intlight * plam * 815**2 / (3e8)

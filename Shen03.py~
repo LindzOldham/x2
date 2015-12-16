@@ -1,0 +1,14 @@
+import numpy as np, pylab as pl, pyfits as py
+
+magv,magi,rmagv,rmagi,rmagb,muv,mui,rmuv,rmui,rv,ri,lumv,lumi,lumb = np.loadtxt('/data/ljo31/Lens/LensParams/PhotCat_1src.txt').T
+ii=np.isfinite(lumi)
+magv,magi,rmagv,rmagi,rmagb,muv,mui,rmuv,rmui,rv,ri,lumv,lumi,lumb = np.loadtxt('/data/ljo31/Lens/LensParams/PhotCat_1src.txt')[ii].T
+
+Lv,Lb = 10**lumv, 10**lumb
+ML_chabv,ML_chabb = 1.54, 2.15
+ML_salpv, ML_salpb = 2.79, 3.90
+Mchabb, Mchabv, Msalpb, Msalpv = Lb*ML_chabb, Lv*ML_chabv, Lb*ML_salpb, Lv*ML_salpv
+pl.figure()
+pl.loglog(rv,Mchabv,'o',label='Chabrier')
+pl.loglog(rv,Msalpv,'o',label='Salpeter')
+pl.legend(loc='lower left')

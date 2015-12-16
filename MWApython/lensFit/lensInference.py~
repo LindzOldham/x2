@@ -1,0 +1,202 @@
+import pymc
+from pylens import lensModel
+from imageSim import convolve
+import indexTricks as iT
+
+class LensInference:
+    def __init__(self,parent):
+        self.parent = parent
+        self.imgs = []
+        self.sigs = []
+        self.psfs = []
+        self.psfImgs = []
+        self.xc = []
+        self.yc = []
+        self.offsets = []
+        self.cov = []
+        for i in range(self.parent.nimgs):
+            self.addImg('%d'%i,self.parent.imgs[i],self.parent.sigs[i],
+                            self.parent.psfs[i])
+
+        self.gals = {}
+        self.lenses = {}
+        self.srcs = {}
+
+        self.Sampler = None
+
+    def addImg(self,name,img,sig,psf=None,scale=1.):
+        self.imgs.append(img)
+        self.sigs.append(sig)
+        if psf is not None:
+            PSF = psf/psf.sum()
+            self.psfImgs.append(PSF)
+            PSF = convolve.convolve(img,PSF)[1]
+            self.psfs.append(PSF)
+        else:
+            self.psfs.append(None)
+            self.psfImgs.append(None)
+        yc,xc = iT.overSample(img.shape,1.)
+        self.xc.append(xc*scale)
+        self.yc.append(yc*scale)
+        if len(self.imgs)>1:
+            self.offsets.append(pymc.Uniform('xoff_%s'%name,-5.*scale,5.*scale,value=0.))
+            self.offsets.append(pymc.Uniform('yoff_%s'%name,-5.*scale,5.*scale,value=0.))
+            self.cov += [0.1,0.1]
+
+    def setOffsets(self,o):
+        self.offsets = [pymc.Uniform(name,lo,hi,val) for name,lo,hi,val in o]
+
+    def addGalaxy(self,name,gal):
+        self.gals[name] = gal
+    def addLens(self,name,lens):
+        self.lenses[name] = lens
+    def addSrc(self,name,src):
+        self.srcs[name] = src
+
+    def removeGalaxy(self,name):
+        if name in self.gals.keys():
+            del self.gals[name]
+    def removeLens(self,name):
+        if name in self.lenses.keys():
+            del self.lenses[name]
+    def removeSrc(self,name):
+        if name in self.srcs.keys():
+            del self.srcs[name]
+
+    def getModel(self):
+        return self.runInference(getModel=True)
+
+    def runInference(self,optCov=None,getModel=False):
+        import numpy
+        from SampleOpt import AMAOpt,levMar
+        cov = [c for c in self.cov]
+        pars = [o for o in self.offsets]
+        gals = []
+        srcs = []
+        lenses = []
+
+        self.gals = self.parent.galaxyManager.objs
+        self.lenses = self.parent.lensManager.objs
+        self.srcs = self.parent.srcManager.objs
+        mask = self.parent.mask
+
+        if len(self.gals)+len(self.srcs)==0:
+            return None
+#        if len(self.gals)+len(self.srcs)+len(self.lenses)==0:
+#            return None
+        for g in self.gals.keys():
+            gal = self.gals[g]
+            gal.makeModel()
+            gal,gpars,gcov = gal.model,gal.modelPars,gal.cov
+            gals.append(gal)
+            pars += gpars
+            cov += gcov
+        for s in self.srcs.keys():
+            src = self.srcs[s]
+            src.makeModel()
+            src,spars,scov = src.model,src.modelPars,src.cov
+            srcs.append(src)
+            pars += spars
+            cov += scov
+        for l in self.lenses.keys():
+            lens = self.lenses[l]
+            lens.makeModel()
+            lens,lpars,lcov = lens.model,lens.modelPars,lens.cov
+            lenses.append(lens)
+            pars += lpars
+            cov += lcov
+        if self.parent.shearFlag==True:
+            shear = self.parent.shear
+            shear.makeModel()
+            lenses.append(shear.model)
+            pars += shear.modelPars
+            cov += shear.cov
+
+        if getModel==True or len(pars)==0:
+            if len(pars)==0:
+                self.outPars = []
+            models = []
+            for i in range(len(self.imgs)):
+                if i==0:
+                    x0 = 0.
+                    y0 = 0.
+                else:
+                    x0 = pars[i*2-2].value
+                    y0 = pars[i*2-1].value
+                img = self.imgs[i]
+                sig = self.sigs[i]
+                psf = self.psfs[i]
+                xc = self.xc[i]
+                yc = self.yc[i]
+                model = lensModel.lensFit(None,img,sig,gals,lenses,srcs,xc+x0,
+                                        yc+y0,1,verbose=False,psf=psf,
+                                        noResid=True,csub=1)
+                models.append(model)
+            return models
+
+        # Trim images for faster convolution if masking
+        xc = []
+        yc = []
+        imgs = []
+        sigs = []
+        psfs = []
+        if mask is not None:
+            Y,X = numpy.where(mask)
+            ylo,yhi,xlo,xhi = Y.min(),Y.max()+1,X.min(),X.max()+1
+            mask = mask[ylo:yhi,xlo:xhi]
+            for i in range(len(self.imgs)):
+                xc.append(self.xc[i][ylo:yhi,xlo:xhi].copy())
+                yc.append(self.yc[i][ylo:yhi,xlo:xhi].copy())
+                imgs.append(self.imgs[i][ylo:yhi,xlo:xhi].copy())
+                sigs.append(self.sigs[i][ylo:yhi,xlo:xhi].copy())
+                if self.psfs[i] is not None:
+                    PSF = self.psfImgs[i]
+                    psfs.append(convolve.convolve(imgs[-1],PSF)[1])
+        else:
+            xc = [i for i in self.xc]
+            yc = [i for i in self.yc]
+            imgs = [i for i in self.imgs]
+            sigs = [i for i in self.sigs]
+            psfs = [i for i in self.psfs]
+
+        @pymc.deterministic
+        def logP(value=0.,p=pars):
+            lp = 0.
+            for i in range(len(imgs)):
+                if i==0:
+                    x0 = 0.
+                    y0 = 0.
+                else:
+                    x0 = pars[i*2-2].value
+                    y0 = pars[i*2-1].value
+                img = imgs[i]
+                sig = sigs[i]
+                psf = psfs[i]
+                lp += lensModel.lensFit(None,img,sig,gals,lenses,srcs,xc[i]+x0,
+                                        yc[i]+y0,1,verbose=False,psf=psf,
+                                        mask=mask,csub=1)
+            return lp
+
+        @pymc.observed
+        def likelihood(value=0.,lp=logP):
+            return lp
+
+        def resid(p):
+            lp = -2*logP.value
+            return self.imgs[0].ravel()*0 + lp
+
+        if optCov is None:
+            optCov = numpy.array(cov)
+
+        #S = levMar(pars,resid)
+        #self.outPars = pars
+        #return
+        niter = 2*len(pars)**2
+        if niter<20:
+            niter = 20
+        S = AMAOpt(pars,[likelihood],[logP],cov=optCov)
+        S.set_minprop(10*len(pars))
+        S.sample(niter)
+        self.Sampler = S
+        self.outPars = pars
+        return self.getModel()

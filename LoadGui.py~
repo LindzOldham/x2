@@ -1,0 +1,26 @@
+import numpy as np, pylab as pl, pyfits as py
+import cPickle
+from pylens import MassModels,pylens
+
+imgName = '/data/ljo31/Lens/SDSSJ1606+2235_F606W_sci_cutout.fits'
+sigName = '/data/ljo31/Lens/SDSSJ1606+2235_F606W_noise3_cutout.fits'
+psfName = '/data/ljo31/Lens/SDSSJ1606+2235_F606W_psf.fits'
+
+img2Name = '/data/ljo31/Lens/SDSSJ1606+2235_F814W_sci_cutout.fits'
+sig2Name = '/data/ljo31/Lens/SDSSJ1606+2235_F814W_noise3_cutout.fits'
+psf2Name = '/data/ljo31/Lens/SDSSJ1606+2235_F814W_psf.fits'
+
+img = py.open(imgName)[0].data.copy()
+sig = py.open(sigName)[0].data.copy()
+psf = py.open(psfName)[0].data.copy()
+
+img2 = py.open(img2Name)[0].data.copy()
+sig2 = py.open(sig2Name)[0].data.copy()
+psf2 = py.open(psf2Name)[0].data.copy()
+
+blue = [img1,sig1,psf1]
+red = [img2,sig2,psf2]
+
+# create a colour image
+import colorImage
+colorImage.ColorImage.createModel(blue,red)

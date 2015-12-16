@@ -1,0 +1,21 @@
+import pylab as pl, numpy as np, pyfits as py
+from scipy.interpolate import splrep,splint,splev
+
+''' choose a cosmology - we have already made it flat by our definition of the proper distance D_M '''
+om,ol,ok,o_r = 0.3,0.7,0,0
+
+z = np.logspace(-2,np.log10(2.5),500)
+z2 = z[:-1]
+zrev = z[::-1]
+Ez = om*(1.+z)**3. + ol + ok*(1.+z)**2. + o_r*(1.+z)**4.
+Ez = Ez**0.5
+
+Emod = splrep(z,Ez)
+Ds = np.zeros(z.size)
+Dls = np.zeros((z.size,z.size-1))
+for i in range(z.size):
+    Ds[i] = splint(0,z[i],Emod)
+    z2 = z[:-1]
+    for j in range(z2.size):
+        Dls[i,j] = splint(z[j],z[i],Emod)
+

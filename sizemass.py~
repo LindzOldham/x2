@@ -1,0 +1,15 @@
+import numpy as np, pylab as pl, pyfits as py
+from scipy.interpolate import splrep, splint, splev
+
+T = 4e9
+logT = np.log10(T)
+table = py.open('/data/ljo31/Lens/LensParams/Phot_1src.fits')[1].data
+### load up BC03 tables and build interpolators, so we can change the age quickly and update the ML estimate
+age_cols,vi, vk = np.loadtxt('/data/mauger/STELLARPOP/chabrier/bc2003_lr_m62_chab_ssp.2color',unpack=True,usecols=(0,5,7))
+age_mls, ml_b, ml_v = np.loadtxt('/data/mauger/STELLARPOP/chabrier/bc2003_lr_m62_chab_ssp.4color',unpack=True,usecols=(0,4,5))
+vimod, vkmod = splrep(age_cols, vi), splrep(age_cols, vk)
+mlbmod, mlvmod = splrep(age_mls,ml_b), splrep(age_mls,ml_v)
+mlb, mlv = splev(logT,mlbmod), splev(logT,mlvmod)
+lumb, lumv, Re, dlumb, dlumv, dRe = table['lum b'], table['lum v'], table['Re v'], table['lum b hi'], table['lum v hi'], table['Re v hi']
+ii=np.isfinite(lumb)
+lumb,lumv,Re,dlumb,dlumv,dRe = lumb[ii],lumv[ii],Re,dlumb[ii],dlumv[ii],dRe[ii]

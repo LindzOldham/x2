@@ -1,0 +1,27 @@
+from imageSim import SBModels
+import indexTricks as iT, pylab as pl, numpy as np, pyfits
+import pymc
+from SampleOpt import AMAOpt
+from scipy import optimize
+
+osrc = np.load('/data/ljo31/Lens/J1605/osrc_F814W.npy')
+
+def func(x,mod,rhs):
+    return mod*x - rhs
+   
+def lnprob(X,xc,yc,rhs):
+    if np.any(X<0):
+        return -np.inf
+    x,y,pa,q,re,n = X
+    src = SBModels.Sersic('Source 1',{'x':x,'y':y,'pa':pa,'q':q,'re':re,'n':n})
+    model = src.pixeval(xc,yc)
+    fit = optimize.leastsq(func,0.1,args=(model,rhs))[0].item()
+    lnL = (-0.5*(model*fit -rhs)**2.).sum()
+    print lnL
+    return lnL
+
+yc,xc = iT.coords(osrc.shape)
+ii = np.where(np.isnan(osrc)==False)
+yc,xc = yc[ii],xc[ii]
+rhs = osrc[ii].flatten()
+
