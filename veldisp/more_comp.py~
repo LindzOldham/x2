@@ -1,0 +1,15 @@
+import numpy as np, pylab as pl
+
+name = 'J0837'
+dir = '/data/ljo31b/EELs/esi/kinematics/inference/vdfit/'
+
+pl.figure()
+ax1 = pl.subplot(121)
+ax2 = pl.subplot(122)
+for nfit in ['6','9','12']:
+    result = np.load(dir+name+'_0.31_source_esi_indous_vdfit_BC_'+nfit)
+    lp,trace,dic,_ = result
+    ax1.hist(dic['source velocity'].ravel(),30,alpha=0.5,label=nfit)
+    ax2.hist(dic['source dispersion'].ravel(),30,alpha=0.5,label=nfit)
+    ax1.legend(loc='upper left')
+pl.show()

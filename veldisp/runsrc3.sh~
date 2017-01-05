@@ -1,0 +1,24 @@
+
+#nice -n 10 python sdss_indous_vdfit.py J0837 8
+#nice -n 10 python sdss_indous_vdfit.py J0901 8
+#nice -n 10 python sdss_indous_vdfit.py J0913 8
+#nice -n 10 python sdss_indous_vdfit.py J1125 8
+#nice -n 10 python sdss_indous_vdfit.py J1144 8
+#nice -n 10 python sdss_indous_vdfit.py J1218 8
+#nice -n 10 python sdss_indous_vdfit.py J1323 8
+#nice -n 10 python sdss_indous_vdfit.py J1347 8
+#nice -n 10 python sdss_indous_vdfit.py J1446 8
+#nice -n 10 python sdss_indous_vdfit.py J1605 8
+#nice -n 10 python sdss_indous_vdfit.py J1606 8
+#nice -n 10 python sdss_indous_vdfit.py J1619 8
+#nice -n 10 python sdss_indous_vdfit.py J2228 8
+#nice -n 10 python esi_bc03_vdfit.py J1218 1.00 lens 8
+#nice -n 10 python esi_indous_vdfit.py J1218 1.00 lens 8
+
+
+#nice -n 10 python sdss_bc03_vdfit.py J1218 8
+#nice -n 10 python sdss_indous_vdfit.py J1218 8
+nice -n 10 python esi_bc03_vdfit.py J1218 1.00 lens 8
+nice -n 10 python esi_indous_vdfit.py J1218 1.00 lens 8
+nice -n 10 python esi_bc03_vdfit.py J1218 1.50 source 8
+nice -n 10 python esi_indous_vdfit.py J1218 1.50 source 8

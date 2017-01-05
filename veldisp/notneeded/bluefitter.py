@@ -1,0 +1,253 @@
+import scipy,numpy,cPickle
+import special_functions as sf
+from scipy import ndimage,optimize,signal,interpolate
+from numpy import linalg
+from math import sqrt,log,log10
+import pymc, myEmcee_blobs as myEmcee
+import numpy as np, pylab as pl
+
+light = 299792.458
+
+def finddispersion(scispec,varspec,tmpspec,tmpwave,datascale,tscale,outwave,zl,zs,nfit=6,outfile=None,mask=None,bias=1e8,lim=5200.,bg='polynomial',nsrc=6,smooth='polymonial'):
+    outwave,scispec,varspec = outwave[outwave>log10(lim)], scispec[outwave>log10(lim)], varspec[outwave>log10(lim)]
+
+    if mask is not None:
+        ma = np.ones(outwave.size)
+        for M in mask:
+            cond = np.where((outwave>np.log10(M[0]))&(outwave<np.log10(M[1])))
+            ma[cond]=0
+        mask=ma==1
+        outwave,scispec,varspec=outwave[mask],scispec[mask],varspec[mask]
+    isig = 1./varspec**0.5
+    ntemps = len(tmpspec)
+
+    vL = pymc.Uniform('lens velocity',-350.,350.)
+    sL = pymc.Uniform('lens dispersion',5.,501.)
+    vS = pymc.Uniform('source velocity',-350.,350.)
+    sS = pymc.Uniform('source dispersion',5.,501.)
+    pars = [vL,sL,vS,sS]
+    cov = np.array([10.,10.,10.,10.])
+
+    # Create the polynomial fit components
+    BIAS = scispec*0.
+    grid = 10**outwave[-1] - 10**outwave[0]
+    operator = scipy.zeros((scispec.size,2*ntemps+nsrc+nfit))
+
+    for i in range(nfit):
+        p = scipy.zeros((nfit,1))
+        p[i] = 1.
+        coeff = {'coeff':p,'type':bg}
+        poly = sf.genfunc(10**outwave,0.,coeff)
+        operator[:,i+2*ntemps+nsrc] = poly
+        BIAS += poly*bias/grid**i
+
+    oper = operator.T  
+    ## 3rd ntemps set is a set of polynomials to describe source bluewards of 6000
+    cond = np.where(outwave<=np.log10(6000.),True,False)
+    for i in range(nsrc):
+        p = scipy.zeros((nsrc,1))
+        p[i] = 1.
+        coeff = {'coeff':p,'type':smooth}
+        poly = sf.genfunc(10**outwave[cond],0.,coeff)
+        oper[i+2*ntemps,cond] = poly
+        BIAS[cond] += bias*poly/grid**i
+
+    @pymc.deterministic
+    def logprob(value=0.,pars=pars):
+        owL,owS = np.log10(tmpwave*(1.+zl+vL.value/light)), np.log10(tmpwave*(1.+zs+vS.value/light))
+        resL,resS = sL.value/light, sS.value/light
+        resL = resL**2. + datascale**2. - tscale**2.
+        resS = resS**2. + datascale**2. - tscale**2.
+        rsL,rsS = resL**0.5 * light, resS**0.5 * light
+        if np.isnan(rsS):
+            rsS = 5.
+        if np.isnan(rsL):
+            rsL = 5.
+        for k in range(ntemps):
+            a = interpolate.bisplev(rsL,np.log10(tmpwave),tmpspec[k])
+            moda = interpolate.splrep(owL,a)
+            oper[k] = interpolate.splev(outwave,moda)
+            b = interpolate.bisplev(rsS,np.log10(tmpwave),tmpspec[k])
+            modb = interpolate.splrep(owS,b)
+            oper[k+ntemps,~cond] = interpolate.splev(outwave[~cond],modb)  
+        op = (oper*isig).T
+        rhs = (scispec+BIAS)*isig
+        fit,chi = optimize.nnls(op,rhs)
+        lp = -0.5*chi**2.
+        return lp
+    
+    @pymc.observed
+    def logp(value=0.,lp=logprob):
+        return lp
+
+    S = myEmcee.Emcee(pars+[logp],cov=cov,nthreads=8,nwalkers=40)
+    S.sample(500)
+    outFile = '/data/ljo31b/EELs/esi/kinematics/inference/'+outfile
+    f = open(outFile,'wb')
+    cPickle.dump(S.result(),f,2)
+    f.close()
+    lp,trace,dic,_ = S.result()
+    a1,a2 = numpy.unravel_index(lp.argmax(),lp.shape)
+    for i in range(len(pars)):
+        pars[i].value = trace[a1,a2,i]
+        print "%18s  %8.3f"%(pars[i].__name__,pars[i].value)
+
+    velL,sigL,velS,sigS = trace[a1,a2]
+    
+    
+    owL,owS = np.log10(tmpwave*(1.+zl+velL/light)), np.log10(tmpwave*(1.+zs+velS/light))
+    resL,resS = sigL/light, sigS/light
+    resL = resL**2. + datascale**2. - tscale**2.
+    resS = resS**2. + datascale**2. - tscale**2.
+    rsL,rsS = resL**0.5 * light, resS**0.5 * light
+    if np.isnan(rsS):
+        rsS = 5.
+    if np.isnan(rsL):
+        rsL = 5.
+    for k in range(ntemps):
+        a = interpolate.bisplev(rsL,np.log10(tmpwave),tmpspec[k])
+        moda = interpolate.splrep(owL,a)
+        oper[k] = interpolate.splev(outwave,moda)
+        b = interpolate.bisplev(rsS,np.log10(tmpwave),tmpspec[k])
+        modb = interpolate.splrep(owS,b)
+        oper[k+ntemps,~cond] = interpolate.splev(outwave[~cond],modb)  
+    op = (oper*isig).T
+    rhs = (scispec+BIAS)*isig
+    fit,chi = optimize.nnls(op,rhs)
+    for i in range(nfit):
+        fit[ntemps*2+nsrc+i] -= bias/grid**(i)
+    for i in range(nsrc):
+        fit[ntemps*2+i] -= bias/grid**(i)
+    outmodel = scipy.dot(oper.T,fit)
+    continuum = scipy.dot(operator,fit)
+
+    pl.figure()
+    pl.plot(10**outwave,scispec)
+    pl.plot(10**outwave,outmodel)
+    pl.plot(10**outwave,continuum)
+    pl.figure()
+    pl.plot(lp)
+    pl.show()
+    return S.result()
+
+def readresults(scispec,varspec,tmpspec,tmpwave,datascale,tscale,outwave,zl,zs,nfit=6,infile=None,mask=None,bias=1e8,lim=6000.,bg='polynomial',nsrc=6,smooth='polynomial'):
+    outwave,scispec,varspec = outwave[outwave>log10(lim)], scispec[outwave>log10(lim)], varspec[outwave>log10(lim)]
+    origwave,origsci,origvar = outwave.copy(),scispec.copy(),varspec.copy()
+    if mask is not None:
+        ma = np.ones(outwave.size)
+        for M in mask:
+            cond = np.where((outwave>np.log10(M[0]))&(outwave<np.log10(M[1])))
+            ma[cond]=0
+        ma=ma==1
+        outwave,scispec,varspec=outwave[ma],scispec[ma],varspec[ma]
+    isig = 1./varspec**0.5
+    ntemps = len(tmpspec)
+    
+    # Create the polynomial fit components
+    BIAS = scispec*0.
+    grid = 10**outwave[-1] - 10**outwave[0]
+    operator = scipy.zeros((scispec.size,2*ntemps+nsrc+nfit))
+    for i in range(nfit):
+        p = scipy.zeros((nfit,1))
+        p[i] = 1.
+        coeff = {'coeff':p,'type':bg}
+        poly = sf.genfunc(10**outwave,0.,coeff)
+        operator[:,i+2*ntemps+nsrc] = poly
+        BIAS += bias*poly/grid**i
+
+    oper = operator.T 
+    ## 3rd ntemps set is a set of polynomials to describe source bluewards of 6000
+    cond = np.where(outwave<=np.log10(6000.),True,False)
+    for i in range(nsrc):
+        p = scipy.zeros((nsrc,1))
+        p[i] = 1.
+        coeff = {'coeff':p,'type':smooth}
+        poly = sf.genfunc(10**outwave[cond],0.,coeff)
+        oper[i+2*ntemps,cond] = poly
+        BIAS[cond] += bias*poly/grid**i
+
+    result = np.load('/data/ljo31b/EELs/esi/kinematics/inference/'+infile)
+    lp,trace,dic,_=result
+    a1,a2 = numpy.unravel_index(lp.argmax(),lp.shape)
+    velL,sigL,velS,sigS = trace[a1,a2]
+
+    owL,owS = np.log10(tmpwave*(1.+zl+velL/light)), np.log10(tmpwave*(1.+zs+velS/light))
+    resL,resS = sigL/light, sigS/light
+    resL = resL**2. + datascale**2. - tscale**2.
+    resS = resS**2. + datascale**2. - tscale**2.
+    rsL,rsS = resL**0.5 * light, resS**0.5 * light
+    if np.isnan(rsS):
+        rsS = 5.
+    if np.isnan(rsL):
+        rsL = 5.
+    for k in range(ntemps):
+        a = interpolate.bisplev(rsL,np.log10(tmpwave),tmpspec[k])
+        moda = interpolate.splrep(owL,a)
+        oper[k] = interpolate.splev(outwave,moda)
+        b = interpolate.bisplev(rsS,np.log10(tmpwave),tmpspec[k])
+        modb = interpolate.splrep(owS,b)
+        oper[k+ntemps,~cond] = interpolate.splev(outwave[~cond],modb) 
+        
+    op = (oper*isig).T
+    rhs = (scispec+BIAS)*isig
+    fit,chi = optimize.nnls(op,rhs)
+    for i in range(nfit):
+        fit[ntemps*2+nsrc+i] -= bias/grid**i
+    for i in range(nsrc):
+        fit[ntemps*2+i] -= bias/grid**i
+    maskmodel = scipy.dot(oper.T,fit)
+    # unmasked
+    if mask is not None:
+        operator = scipy.zeros((origsci.size,2*ntemps+nsrc+nfit))
+        
+        for i in range(nfit):
+            p = scipy.zeros((nfit,1))
+            p[i] = 1.
+            coeff = {'coeff':p,'type':bg}
+            poly = sf.genfunc(10**origwave,0.,coeff)
+            operator[:,i+2*ntemps+nsrc] = poly
+
+        oper = operator.T 
+        origcond = np.where(origwave<=np.log10(6000.),True,False)
+        for i in range(nsrc):
+            p = scipy.zeros((nsrc,1))
+            p[i] = 1.
+            coeff = {'coeff':p,'type':smooth}
+            poly = sf.genfunc(10**origwave[origcond],0.,coeff)
+            oper[i+2*ntemps,origcond] = poly
+
+
+        for k in range(ntemps):
+            a = interpolate.bisplev(rsL,np.log10(tmpwave),tmpspec[k])
+            moda = interpolate.splrep(owL,a)
+            oper[k] = interpolate.splev(origwave,moda)
+            b = interpolate.bisplev(rsS,np.log10(tmpwave),tmpspec[k])
+            modb = interpolate.splrep(owS,b)
+            oper[k+ntemps,~origcond] = interpolate.splev(origwave[~origcond],modb)  
+
+    outmodel = scipy.dot(oper.T,fit)
+    lens = scipy.dot(oper[:ntemps].T,fit[:ntemps])
+    source = scipy.dot(oper[ntemps:2*ntemps+nsrc].T,fit[ntemps:2*ntemps+nsrc])
+    cont = scipy.dot(oper[2*ntemps+nsrc:].T,fit[2*ntemps+nsrc:])
+
+    pl.figure()
+    if mask is not None:
+        for M in mask:
+            pl.axvspan(M[0], M[1], color='DarkGray')
+    pl.plot(10**origwave,origsci,'LightGray')
+    pl.plot(10**origwave,outmodel,'k')
+    pl.plot(10**origwave,lens,'SteelBlue',label='lens')
+    pl.plot(10**origwave,source,'Crimson',label='source')
+    pl.plot(10**origwave,cont,'Navy')
+    pl.legend(loc='upper left')
+    pl.xlabel('observed wavelength ($\AA$)')
+    pl.ylabel('flux (arbitrary units)')
+    pl.axis([lim,9000,-0.5,4])
+    pl.show()
+    #pl.figure()
+    #pl.plot(10**outwave,scispec-maskmodel,'k')
+    print '%.2f'%velL, '%.2f'%sigL,'%.2f'%velS,'%.2f'%sigS
+    for i in fit:
+        print i
+    return result
+

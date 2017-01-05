@@ -1,0 +1,5 @@
+
+nice -n 10 python stitchvd2_sdss_eels_bc03.py J0837
+nice -n 10 python stitchvd2_sdss_eels_bc03.py J0901
+nice -n 10 python stitchvd2_sdss_eels_bc03.py J0913
+nice -n 10 python stitchvd2_sdss_eels_bc03.py J1125

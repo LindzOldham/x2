@@ -1,0 +1,62 @@
+import numpy as np, pylab as pl, pyfits as py, cPickle
+import pymc, myEmcee_blobs as myEMcee
+from astLib import astCalc
+from scipy.interpolate import splrep, splev
+
+
+r,f = np.loadtxt('/data/ljo31b/EELs/sizemass/re_flux.dat').T
+modr = splrep(r*0.05*6.6,f)
+
+logRe,logM,dlogRe,dlogM,rho = np.load('/data/ljo31/Lens/LensParams/ReMass_1src_huge_ljo.npy').T
+sz = np.load('/data/ljo31/Lens/LensParams/SourceRedshifts.npy')[()]
+names = sz.keys()
+names.sort()
+names = np.delete(names,6)
+scales = np.array([astCalc.da(sz[name])*1e3*np.pi/180./3600. for name in names])
+Re=10**logRe
+fluxes = splev(Re,modr)
+
+alpha, beta = 1.05,11.4
+pars, cov = [], []
+pars.append(pymc.Uniform('alpha',-20,10,-10 ))
+pars.append(pymc.Uniform('beta',-10,20,1.0 ))
+pars.append(pymc.Uniform('sigma',0,3.,value=1.))
+cov += [0.5,0.5,0.01]
+optCov = np.array(cov)
+
+@pymc.deterministic
+def logP(value=0.,p=pars):
+    logrfunc = beta*logM + alpha
+    rfunc = 10**logrfunc # in kpc
+    arg = (Re-rfunc)**2./sigma**2.
+    norm = (2.*np.pi*sigma**2.)**0.5
+    prob = np.log10(fluxes) - np.log10(norm) - 0.5*arg
+    return prob
+
+@pymc.observed
+def likelihood(value=0.,lp=logP):
+    return lp
+
+S = myEmcee.Emcee(pars+[likelihood],cov=optCov,nthreads=1,nwalkers=20)
+S.sample(5000)
+outFile = '/data/ljo31b/EELs/sizemass/sizemass_intrinsic'
+f = open(outFile,'wb')
+cPickle.dump(S.result(),f,2)
+f.close()
+result = S.result()
+lp,trace,dic,_ = result
+a1,a2 = np.unravel_index(lp.argmax(),lp.shape)
+ftrace=trace.reshape((trace.shape[0]*trace.shape[1],trace.shape[2]))
+for i in range(len(pars)):
+    pars[i].value = np.percentile(ftrace[:,i],50,axis=0)
+    print "%18s  %8.5f"%(pars[i].__name__,pars[i].value)
+
+
+pl.figure()
+pl.plot(lp)
+for key in dic.keys():
+    pl.figure()
+    pl.title(key)
+    pl.plot(dic[key])
+
+pl.show()

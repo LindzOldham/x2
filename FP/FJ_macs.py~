@@ -1,0 +1,25 @@
+import numpy as np, pylab as pl, pyfits as py
+import pymc
+import myEmcee_blobs as myEmcee
+import cPickle
+from tools import solarmag
+from stellarpop import distances
+from SampleOpt import AMAOpt
+from astLib import astCalc
+
+
+cat = np.load('/data/ljo31b/MACSJ0717/data/MLM_macs_newmasked_FINALCMD_doubles.npy')
+ii = np.where(cat[:,0]!=31.)
+name,M,ML,dM,dML,re,dre,sigma,dsigma,mu,dmu,vel,dvel = cat[ii].T
+
+# these have been converted and corrected alreadyz
+sigma/=100.
+dsigma /= 100.
+
+scale = astCalc.da(0.55)*1e3*np.pi/180./3600.
+Dl = astCalc.dl(0.55)*1e6
+mag = mu - 2.5*np.log10(2.*np.pi*re**2./scale**2.)
+DM = 5. - 5.*np.log10(Dl)
+mag +=DM
+
+pl.scatter(np.log10(sigma), mag, s=40,color='Crimson')

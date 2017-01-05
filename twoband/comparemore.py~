@@ -1,0 +1,25 @@
+phot = py.open('/data/ljo31/Lens/LensParams/Phot_1src_new.fits')[1].data
+names = phot['name']
+
+re,rel,reu = phot['Re v'], phot['Re v lo'], phot['Re v hi']
+dre = np.mean((rel,reu),axis=0)
+mu,mul,muu = phot['mu v'], phot['mu v lo'], phot['mu v hi']
+dmu = np.mean((mul,muu),axis=0)
+
+
+tab1 = py.open('/data/ljo31/Lens/LensParams/Phot_1src_new.fits')[1].data
+tab2 = py.open('/data/ljo31/Lens/LensParams/Phot_1src_huge.fits')[1].data
+
+re1,mag1,mu1,names1 = tab1['re v'], tab1['mag v'], tab1['mu v'],tab1['name']
+re2,mag2,mu2,names2 = tab2['re v'], tab2['mag v'], tab2['mu v'],tab2['name']
+re3,mag3,mu3 = re2*0,mag2*0,mu2*0
+
+for name in names2:
+    ii = np.where(names1==name)
+    mag3[np.where(names2==name)] = mag1[ii]
+    mu3[np.where(names2==name)] = mu1[ii]
+    re3[np.where(names2==name)] = re1[ii]
+
+for name in names2:
+    ii=np.where(names2==name)
+    print name, '%.2f'%re2[ii], '%.2f'%re3[ii], '%.2f'%(re2[ii]-re3[ii])

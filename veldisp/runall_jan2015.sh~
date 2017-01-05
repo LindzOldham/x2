@@ -1,0 +1,28 @@
+#!/bin/bash
+# nb. wid is in arcseconds and is the radius
+
+nice -n 10 python stitchvd2_may2014_apertures_sep.py J1347 1.00 lens
+nice -n 10 python stitchvd2_may2014_apertures_sep.py J1347 1.5 source
+
+nice -n 10 python stitchvd2_may2014_apertures_sep.py J1323 1.00 lens
+nice -n 10 python stitchvd2_may2014_apertures_sep.py J1323 1.50 source
+
+
+nice -n 10 python stitchvd2_may2014_apertures_sep.py J1446 1.00 lens
+nice -n 10 python stitchvd2_may2014_apertures_sep.py J1446 1.50 source
+
+
+nice -n 10 python stitchvd2_may2014_apertures_sep.py J1605 1.00 lens
+nice -n 10 python stitchvd2_may2014_apertures_sep.py J1605 1.50 source
+
+nice -n 10 python stitchvd2_may2014_apertures_sep.py J1606 1.00 lens
+nice -n 10 python stitchvd2_may2014_apertures_sep.py J1606 1.50 source
+
+
+nice -n 10 python stitchvd2_may2014_apertures_sep.py J1619 1.00 lens
+nice -n 10 python stitchvd2_may2014_apertures_sep.py J1619 1.50 source
+
+nice -n 10 python stitchvd2_may2014_apertures_sep.py J2228 1.00 lens
+nice -n 10 python stitchvd2_may2014_apertures_sep.py J2228 1.50 source
+
+

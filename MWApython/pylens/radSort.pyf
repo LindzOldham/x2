@@ -1,0 +1,22 @@
+! File radSort.pyf
+python module radSort
+interface
+  subroutine radsort(a,n)
+    intent(c) radsort
+    intent(c)
+    integer intent(hide),depend(a) :: n=len(a)
+    integer intent(in,out) :: a(n)
+  end subroutine radsort
+
+  subroutine sort_csr(ia,ja,a,m,nia,na)
+    intent(c) sort_csr
+    intent(c)
+    integer intent(hide),depend(ia) :: nia=len(ia)
+    integer intent(hide),depend(ja) :: na=len(ja)
+    integer intent(in) :: m
+    integer intent(in) :: ia(nia)
+    double precision,intent(in) :: a(na)
+    integer intent(in,out) :: ja(na)
+  end subroutine sort_csr
+end interface
+end python module radSort

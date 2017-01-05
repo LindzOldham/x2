@@ -1,0 +1,25 @@
+import numpy as np, pylab as pl, pyfits as py
+
+re_norm, vd_norm, mu_norm = np.loadtxt('/data/ljo31b/EELs/phys_models/FP_normals_100.dat').T
+re_nugg, vd_nugg, mu_nugg = np.loadtxt('/data/ljo31b/EELs/phys_models/FP_nuggets_100.dat').T
+
+pl.figure()
+pl.scatter(1.2*np.log10(vd_norm)+0.3*mu_norm, np.log10(re_norm),color='SteelBlue',s=40,label='normals')
+pl.scatter(1.2*np.log10(vd_nugg)+0.3*mu_nugg, np.log10(re_nugg),color='Crimson',s=40,label='nuggets')
+pl.xlabel('$1.2 \log\sigma + 0.3 \mu$')
+pl.ylabel('$\log r_e$')
+pl.legend(loc='lower right')
+
+pl.figure()
+pl.hist(vd_norm,30,color='SteelBlue',alpha=0.5,histtype='stepfilled')
+pl.hist(vd_nugg,30,color='Crimson',alpha=0.5,histtype='stepfilled')
+
+pl.figure()
+pl.hist(mu_norm,30,color='SteelBlue',alpha=0.5,histtype='stepfilled')
+pl.hist(mu_nugg,30,color='Crimson',alpha=0.5,histtype='stepfilled')
+
+pl.figure()
+pl.hist(re_norm,30,color='SteelBlue',alpha=0.5,histtype='stepfilled')
+pl.hist(re_nugg,30,color='Crimson',alpha=0.5,histtype='stepfilled')
+
+# nuggets generally have much brighter SBs (as more compact), then small sizes and fewer small VDs.

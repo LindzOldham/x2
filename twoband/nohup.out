@@ -1,0 +1,114 @@
+axes.color_cycle is deprecated and replaced with axes.prop_cycle; please use the latter.
+0
+50.9014856929 55.9014856929 60.9014856929 x
+31.5922695188 36.5922695188 41.5922695188 y
+0.05 0.902279038112 1.0 q
+-180.0 -65.4631669836 180.0 pa
+0.5 8.30714376792 100.0 b
+0.5 0.966590333962 1.5 eta
+28 28
+axes.color_cycle is deprecated and replaced with axes.prop_cycle; please use the latter.
+0
+x 45.6928736441
+y 48.7690752565
+q 0.979584234446
+pa 103.097228824
+re 18.4793052672
+n 2.03666551203
+40.6650812636 45.6650812636 50.6650812636 x
+43.8255263143 48.8255263143 53.8255263143 y
+0.05 0.958661033015 1.0 q
+-180.0 -121.421796447 180.0 pa
+0.5 9.88970052227 100.0 b
+0.5 1.25951090562 1.5 eta
+(Source 1 x_add_Lens 1 x) x
+(Source 1 y_add_Lens 1 y) y
+26 26
+56
+1
+56
+2
+56
+3
+           xoffset     0.023
+           yoffset     1.134
+        Galaxy 1 x    56.043
+        Galaxy 1 y    36.529
+        Galaxy 1 q     0.848
+       Galaxy 1 pa    89.613
+       Galaxy 1 re    38.347
+        Galaxy 1 n     7.368
+        Galaxy 2 x    54.334
+        Galaxy 2 y    37.383
+        Galaxy 2 q     0.185
+       Galaxy 2 pa    14.088
+       Galaxy 2 re     7.938
+        Galaxy 2 n     0.184
+          Lens 1 x    55.965
+          Lens 1 y    36.574
+          Lens 1 q     0.896
+         Lens 1 pa   -67.553
+          Lens 1 b     8.299
+        Lens 1 eta     0.955
+          extShear    -0.013
+       extShear PA   -30.631
+        Source 1 q     0.521
+       Source 1 re     6.713
+        Source 1 n     4.279
+       Source 1 pa     6.445
+        Source 1 x    -1.220
+        Source 1 y     0.419
+sampling
+0
+sampling
+1
+sampling
+2
+sampling
+3
+sampling
+4
+sampling
+5
+sampling
+6
+52
+1
+52
+2
+52
+3
+           xoffset     0.912
+           yoffset    -0.074
+        Galaxy 1 x    45.691
+        Galaxy 1 y    48.764
+        Galaxy 1 q     0.961
+       Galaxy 1 pa   106.731
+       Galaxy 1 re    17.954
+        Galaxy 1 n     2.023
+        Galaxy 2 q     0.924
+       Galaxy 2 pa  -142.238
+       Galaxy 2 re     1.937
+        Galaxy 2 n     1.033
+          Lens 1 x    45.683
+          Lens 1 y    48.831
+          Lens 1 q     0.959
+         Lens 1 pa  -122.138
+          Lens 1 b     9.901
+        Lens 1 eta     1.270
+          extShear    -0.045
+       extShear PA   -30.803
+        Source 1 q     0.688
+       Source 1 re    26.172
+        Source 1 n     6.542
+       Source 1 pa    97.424
+        Source 1 x     1.334
+        Source 1 y     3.449
+sampling
+7
+sampling
+8
+sampling
+9
+sampling
+10

@@ -1,0 +1,46 @@
+import numpy as np, pylab as pl, pyfits as py
+import pymc
+import myEmcee_blobs as myEmcee
+import cPickle
+from tools import solarmag
+from stellarpop import distances
+
+''' data stuff'''
+fp = np.load('/data/ljo31b/EELs/esi/kinematics/inference/results.npy')
+l,m,u = fp
+d = np.mean((l,u),axis=0)
+dvl,dvs,dsigmal,dsigmas = d.T
+vl,vs,sigmal,sigmas = m.T
+sigmas /= 100.
+sigmal /= 100.
+dsigmas /= 100.
+dsigmal /= 100.
+# remove J1248 as we don't have photometry
+sigmas,sigmal,dsigmas,dsigmal = np.delete(sigmas,6), np.delete(sigmal,6),np.delete(dsigmas,6),np.delete(dsigmal,6)
+
+phot = py.open('/data/ljo31/Lens/LensParams/Phot_1src_new.fits')[1].data
+
+magv,magi,magk,v_src,i_src,k_src,muv,mui,muk = np.load('/data/ljo31/Lens/LensParams/got_phot_211_srcs_zhalf.npy')
+
+re,rel,reu = phot['Re v'], phot['Re v lo'], phot['Re v hi']
+mu,mul,muu = phot['mu v'], phot['mu v lo'], phot['mu v hi']
+###################
+
+
+result = np.load('/data/ljo31b/EELs/FP/inference/zhalf_212')
+lp,trace,dic,_ = result
+for key in dic.keys():
+    dic[key] = dic[key][4000:]
+
+alpha,beta,gamma = np.median(dic['a'].ravel()), np.median(dic['b'].ravel()), np.median(dic['gamma'].ravel())
+
+X = alpha*np.log10(sigmas) + beta * muv
+Y = np.log10(re)
+sz = np.load('/data/ljo31/Lens/LensParams/SourceRedshiftsUpdated.npy')[()]
+names = phot['name']
+z = X*0.
+for name in names:
+    z[names==name] = sz[name]
+
+pl.figure()
+pl.scatter,z,Y-X,color='SteelBlue',s=30)

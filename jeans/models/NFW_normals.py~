@@ -1,0 +1,94 @@
+from tools import solarmag
+import numpy as np, pylab as pl, pyfits as py
+import cPickle
+from jeans.makemodel import *
+from astLib import astCalc
+from imageSim import SBObjects
+from itertools import product
+from linslens import EELsModels_huge as L
+
+def run(Mstar,result,name):
+    
+    # get a new size from vdW14
+    logr1 = 0.42 - 0.71*(10.+np.log10(5.)) + 0.71*Mstar
+    logr = np.log10(2.88e-6) + 0.56*Mstar
+    #print 10**logr1, 10**logr
+
+    # make model and extract useful properties
+    model = L.EELs(result,name)
+    model.Initialise()
+    RE1,_ = model.GetSourceSize(kpc=True)
+    #print RE1, 10**logr
+    RE = 10**logr
+    fits = model.fits
+    scale = model.scale
+    z = model.z
+    #print 'nugget mu', model.GetIntrinsicMags()[0] + 2.5*np.log10(2.*np.pi*RE1**2. / scale**2.)
+    # recalculate SB based on new size; magnitude is the same though
+    mag = model.GetIntrinsicMags()[0]
+    mu = mag + 2.5*np.log10(2.*np.pi*RE**2. / scale**2.) # re in arcsec for this
+    #print 'normal mu', mu
+    
+
+    r = np.logspace(-5,5,1501)
+    gal1 = model.srcs[0]
+    gal2 = model.srcs[0]
+    gal2.re *= 0.05*scale
+    sb_nugg = gal2.eval(r)
+    gal1.re = RE
+    gal1.amp = 1
+    gal2.amp = 1
+    #gal1.setAmpFromMag(mag,ZPdic[bands[name]]) # but this doesn't matter
+    sb = gal1.eval(r)
+    print gal1.re
+    print mu
+    #pl.figure()
+    #pl.loglog(r,sb/sb[0],label='normal')
+    #pl.loglog(r,sb_nugg/sb_nugg[0],label='nugget')
+    #pl.legend(loc='upper right')
+    #pl.show()
+    # halo properties
+    Mhalo = highz_halo_table(Mstar,0.5)
+    rhalo = virialRadius(Mhalo,z)    
+
+    # stellar mass profile
+    lr,light = deproject(r,sb)
+    Mdm = NFW(lr,rhalo,Mhalo,z=z)
+    Mlum = light2mass(lr,light,1.)
+    fac = Mlum[-1]/10**Mstar
+    Mlum /= fac
+    
+    # take sigma within the effective radius of the galaxy
+    sigma_star = veldisp(r,sb,Mlum+Mdm,ap=1.*RE)
+    #vd = (sigma_dm + sigma_star)**0.5
+    vd = sigma_star**0.5
+
+    # SB
+    cat_nugg.append([RE,mu,vd])
+    print  name, '%.2f'%vd, mu,RE
+
+masses = np.load('/data/ljo31b/EELs/inference/new/huge/masses_211.npy')
+logM = masses[3]
+
+phot = py.open('/data/ljo31/Lens/LensParams/Phot_1src_huge_new_new.fits')[1].data
+names = phot['name']
+bands = np.load('/data/ljo31/Lens/LensParams/HSTBands.npy')[()]
+ZPdic = dict([('F555W',25.711),('F606W',26.493),('F814W',25.947)])
+
+cat_nugg = []
+
+dir = '/data/ljo31/Lens/LensModels/twoband/'
+
+
+for i in range(logM.size):
+    name = names[i]
+    if name == 'J1606':
+        continue
+    result = np.load(dir+names[i]+'_211')
+    
+    M = logM[i]
+    run(M,result,name)
+
+np.savetxt('/data/ljo31b/EELs/phys_models/models/NFW_normal.dat',cat_nugg)
+
+

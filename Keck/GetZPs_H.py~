@@ -1,0 +1,34 @@
+import numpy as np, pylab as pl, pyfits as py
+from linslens import EELsImages as E
+from imageSim import SBObjects, convolve
+import indexTricks as iT
+
+plot,square=True,75
+image = py.open('/data/ljo31/Lens/sharpdata/J1131_nirc2_w_Kp_6x6.fits')[0].data.copy()
+# wide camera has 0.04 arcsec/pixel so a 2" aperture is now 50 pixels!!! And 75 pixels is 3 arcsec, perfecty.
+
+K_2mass = 12.927
+Kcorr = 1.87
+kern = SBObjects.Gauss('kernel',{'x':0,'y':0,'sigma':50./2.322,'q':1,'pa':0,'amp':1})
+xk,yk = iT.coords((121,121))-60.
+kernel = kern.pixeval(xk,yk)
+kernel = kernel/np.sum(kernel)
+kernelc = convolve.convolve(image,kernel)[1]
+blur = convolve.convolve(image,kernelc,False)[0]
+if plot:
+    pl.figure()
+    pl.imshow(blur,interpolation='nearest',origin='lower')
+    pl.colorbar()
+    pl.figure()
+    pl.imshow(image,interpolation='nearest',origin='lower',vmin=0,vmax=100)
+    pl.colorbar()
+y,x=iT.coords(image.shape)-square
+R=np.sqrt(x**2.+y**2.)
+flux = np.sum(blur[np.where(R<square)])
+logged = -2.5*np.log10(flux)
+mag = K_2mass + Kcorr
+print K_2mass
+ZP = mag-logged
+print ZP
+
+# ZP = 28.117

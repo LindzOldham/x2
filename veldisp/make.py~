@@ -1,0 +1,11 @@
+import VDfit
+import pyfits as py
+
+sigsci = lambda wave: 20.26
+t1 = VDfit.BC03(sigsci)
+t2 = VDfit.PICKLES(sigsci)
+
+scispec = py.open('/data/ljo31b/EELs/esi/kinematics/apertures/final/J0837_ap_1.00_spec_lens.fits')[0].data
+sciwave = py.open('/data/ljo31b/EELs/esi/kinematics/apertures/final/J0837_ap_1.00_wl_lens.fits')[0].data
+linwave=10**sciwave
+t1.getSpectra(linwave,0.4,200.)

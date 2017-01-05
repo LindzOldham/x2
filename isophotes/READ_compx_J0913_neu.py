@@ -1,0 +1,97 @@
+import numpy as np, pylab as pl, pyfits as py
+from linslens import EELsModels as L
+from tools.simple import printn, climshow
+from scipy.interpolate import splrep, splev,splint
+import indexTricks as iT
+from scipy import ndimage
+from tools.fitEllipse import *
+import pymc
+import myEmcee_blobs as myEmcee
+import cPickle
+from numpy import cos, sin
+import glob
+from tools.simple import *
+from imageSim import SBModels,convolve,SBObjects
+
+# this works!! Now test it out on the two-component model and see what we get!!!
+
+# now we've fitted I(R) as a series of ellipses.
+# Now we want to extract q, pa (could spline to get q(r), pa(r) or just assume it's constant for now)
+
+files = glob.glob('/data/ljo31/Lens/compx_J0901_neu_*')
+pa = np.zeros(len(files))
+q,a,b,alpha = pa*0.,pa*0.,pa*0.,pa*0.
+
+for f in range(len(files)):
+    file = files[f]
+    result = np.load(file)
+    lp,trace,dic,_= result 
+    ftrace = trace[trace.shape[0]*0.5:].reshape(trace.shape[0]*0.5*trace.shape[1],trace.shape[2])
+    a[f],b[f],alpha[f] = np.percentile(ftrace,50,axis=0)
+    q[f],pa[f] = b[f]/a[f], alpha[f]*180./np.pi
+    print q[f],pa[f]
+
+# define radial coordinates so we can integrate surface brightness profile to get luminosity
+result = np.load('/data/ljo31/Lens/J0913/twoband_212')#/LensModels/new/J0913_212')#
+name='J0913'
+from linslens import EELsModels as L
+model = L.EELs(result,name)
+model.Initialise()
+model.GetIntrinsicMags()
+model.GetSourceSize(kpc=True)
+z,Da,scale=model.z,model.Da,model.scale
+srcs=model.srcs
+fits=model.fits
+
+xc,yc = srcs[0].pars['x'],srcs[0].pars['y']
+s1 = SBObjects.Sersic('s1',{'x':0.0,'y':0.0,'re':srcs[0].pars['re'],'n':srcs[0].pars['n'],'q':srcs[0].pars['q'],'pa':srcs[0].pars['pa']})
+s2 = SBObjects.Sersic('s2',{'x':0.0,'y':0.0,'re':srcs[1].pars['re'],'n':srcs[1].pars['n'],'q':srcs[1].pars['q'],'pa':srcs[1].pars['pa']})
+
+OVRS=10.
+yo,xo = iT.overSample(np.zeros((200,200)).shape,OVRS)
+yo-=99.5
+xo-=99.5
+
+S1 = fits[0][-3]*s1.pixeval(xo,yo,1./OVRS,csub=31)
+S2 = fits[0][-2]*s2.pixeval(xo,yo,1./OVRS,csub=31)
+
+Q,PA,ALPHA = np.median(q),np.median(pa),np.median(alpha) # for now - spline this later
+xe = xo*cos(ALPHA) + yo*sin(ALPHA)
+ye = xo*sin(ALPHA) - yo*cos(ALPHA)
+r = (xe**2. * Q + ye**2. / Q)**0.5
+
+## re-evaluate on a smaller grid to do the integral
+yo=np.logspace(-2,2.5,100)
+xo=np.logspace(-2,2.5,100)
+xo,yo = np.meshgrid(xo,yo)
+
+xe = xo*cos(ALPHA) + yo*sin(ALPHA)
+ye = xo*sin(ALPHA) - yo*cos(ALPHA)
+r = (xe**2. * Q + ye**2. / Q)**0.5
+S1 = fits[0][-3]*s1.pixeval(xo,yo,1./OVRS,csub=31)
+S3 = S1*2.*np.pi*r
+
+argsort = np.argsort(r.flatten())
+sortR = r.flatten()[argsort]
+sortS = S3.flatten()[argsort]
+pl.figure()
+pl.plot(sortR,sortS)
+
+mod = splrep(sortR,sortS,t=np.logspace(-1.9,2.4,50))
+pl.figure()
+pl.plot(sortR,sortS,'o')
+pl.plot(sortR,splev(sortR,mod))
+pl.show()
+
+intlight = sortR*0.
+for i in range(intlight.size):
+    intlight[i] = splint(0,sortR[i],mod)
+
+pl.figure()
+pl.plot(sortR,intlight/np.sum(intlight),'.')
+pl.axhline(intlight[-1]*0.5/np.sum(intlight))
+pl.show()
+
+mod = splrep(intlight,sortR)
+reff = splev(intlight[-1]*0.5,mod)
+print reff

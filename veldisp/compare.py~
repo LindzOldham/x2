@@ -1,0 +1,22 @@
+import numpy as np, pylab as pl, pyfits as py
+import sys
+import glob
+
+name = sys.argv[1]
+infile = glob.glob('/data/ljo31b/EELs/esi/kinematics/inference/'+name+'*_wide')
+if len(infile)==1.:
+    result = np.load(infile[0])
+else:
+    result = np.load('/data/ljo31b/EELs/esi/kinematics/inference/wide_'+name+'_00')
+
+lp,trace,dic,_=result
+result = np.load('/data/ljo31b/EELs/esi/kinematics/inference/'+name)
+lp2,trace2,dic2,_=result
+
+
+for key in 'lens dispersion','source dispersion':
+    pl.figure()
+    pl.title(key)
+    pl.hist(dic[key][300:].ravel(),30,alpha=0.5,histtype='stepfilled',normed=True)
+    pl.hist(dic2[key][200:].ravel(),30,alpha=0.5,histtype='stepfilled',normed=True)
+pl.show()

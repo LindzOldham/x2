@@ -1,0 +1,128 @@
+import numpy as np, pylab as pl, pyfits as py, cPickle
+import pymc, myEmcee_blobs as myEmcee
+from astLib import astCalc
+from scipy.interpolate import splrep, splev
+from tools.EllipsePlot import *
+
+dat = np.loadtxt('/data/ljo31b/EELs/sizemass/re_allflux.dat')
+r = dat[:,0]
+f = dat[:,1:]
+
+logRe,logM,dlogRe,dlogM,rho = np.load('/data/ljo31/Lens/LensParams/ReMass_2src_huge_ljo.npy').T
+sz = np.load('/data/ljo31/Lens/LensParams/SourceRedshifts.npy')[()]
+names = sz.keys()
+names.sort()
+names = np.delete(names,6)
+scales = np.array([astCalc.da(sz[name])*1e3*np.pi/180./3600. for name in names])
+Re=10**logRe
+dRe = dlogRe*Re
+
+fluxes = Re*0.
+for i in range(f.shape[1]):
+    model = splrep(r*0.05*scales[i], f[:,i]/np.max(f[:,i]))
+    fluxes[i] = splev(Re[i],model)
+
+
+pars, cov = [], []
+alpha = pymc.Uniform('alpha',-3,3)#,-10 )
+beta = pymc.Uniform('beta',0,4)#,1.0 )
+sigma = pymc.Uniform('sigma',0,1.)#,value=3.)
+
+pars = [alpha,beta,sigma]
+cov += [0.5,0.5,0.01]
+optCov = np.array(cov)
+
+@pymc.deterministic
+def logP(value=0.,p=pars):
+    logrfunc = beta.value*(logM-11.) + alpha.value
+    sigma2 = sigma.value**2. + dlogRe**2.
+    arg = (logRe -logrfunc)**2./sigma2 
+    #rfunc = 10**logrfunc # in kpc
+    #sigma2 = sigma.value**2. + dRe**2. 
+    #arg = (Re-rfunc)**2./sigma2
+    norm = (2.*np.pi*sigma2)**0.5
+    prob = np.log(fluxes) - np.log(norm) - 0.5*arg
+    lp = prob.sum()
+    return lp
+
+@pymc.observed
+def likelihood(value=0.,lp=logP):
+    return lp
+
+#S = myEmcee.Emcee(pars+[likelihood],cov=optCov,nthreads=1,nwalkers=80)
+#S.sample(5000)
+outFile = '/data/ljo31b/EELs/sizemass/sizemass_intrinsic_new_s2rc'
+#f = open(outFile,'wb')
+#cPickle.dump(S.result(),f,2)
+#f.close()
+#result = S.result()
+result = np.load(outFile)
+lp,trace,dic,_ = result
+a1,a2 = np.unravel_index(lp.argmax(),lp.shape)
+trace=trace[1000:]
+ftrace=trace.reshape((trace.shape[0]*trace.shape[1],trace.shape[2]))
+for i in range(len(pars)):
+    pars[i].value = np.percentile(ftrace[:,i],50,axis=0)
+    print "%18s  %8.5f"%(pars[i].__name__,pars[i].value)
+
+alpha,beta,sigma= pars[0].value, pars[1].value,pars[2].value
+xfit = np.linspace(8,14,20)
+
+burnin=1000
+f = trace[burnin:].reshape((trace[burnin:].shape[0]*trace[burnin:].shape[1],trace[burnin:].shape[2]))
+fits=np.zeros((len(f),xfit.size))
+for j in range(0,len(f)):
+    alpha,beta,sigma = f[j]
+    fits[j] = beta*(xfit-11.)+alpha
+
+los,meds,ups = np.percentile(f,[16,50,84],axis=0)
+los,ups=meds-los,ups-meds
+
+yfit=meds[1]*(xfit-11.)+meds[0]
+lo,med,up = xfit*0.,xfit*0.,xfit*0.
+for j in range(xfit.size):
+    lo[j],med[j],up[j] = np.percentile(fits[:,j],[16,50,84],axis=0)
+
+
+# plot size-mass relation
+#pl.figure()
+pl.scatter(logM,logRe,color='SteelBlue',s=40)
+plot_ellipses(logM,logRe,dlogM,dlogRe,rho,'SteelBlue')
+pl.fill_between(xfit,yfit,lo,color='LightBlue',alpha=0.5)
+pl.fill_between(xfit,yfit,up,color='LightBlue',alpha=0.5)
+#xfit = np.linspace(10,13,20)
+pl.plot(xfit,alpha+beta*(xfit-11.),color='SteelBlue',label='intrinsic')
+vdWfit1 = 0.42 - 0.71*(10.+np.log10(5.)) + 0.71*xfit
+pl.plot(xfit,vdWfit1,'k--',label = 'van der Wel+14')
+
+#pl.plot(xfit,-11.36+1.05*xfit,color='Crimson',label='observed relation')
+#pl.plot(xfit, 0.56*xfit+np.log10(2.88e-6),color='k',label='Shen 2003')
+pl.legend(loc='upper left',fontsize=15)
+#pl.savefig('/data/ljo31/public_html/Lens/phys_models/intrinsic_v_observed_2src.png')
+pl.show()
+
+'''pl.figure()
+pl.plot(lp[100:])
+
+for key in dic.keys():
+    pl.figure()
+    pl.title(key)
+    pl.plot(dic[key])
+    #pl.figure()
+    #pl.hist(dic[key].ravel(),30)
+    #pl.title(key)
+pl.show()
+
+pl.figure(figsize=(7,15))
+pl.subplot(311)
+pl.hist(dic['alpha'][3000:].ravel(),30)
+pl.title('alpha')
+pl.subplot(312)
+pl.hist(dic['beta'][3000:].ravel(),30)
+pl.title('beta')
+pl.subplot(313)
+pl.hist(dic['sigma'][3000:].ravel(),30)
+pl.title('sigma')
+#pl.savefig('/data/ljo31/public_html/Lens/phys_models/inference_2src.png')
+pl.show()
+'''

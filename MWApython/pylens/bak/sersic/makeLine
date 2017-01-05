@@ -1,0 +1,1 @@
+f2py /opt/ioa/software/python/2.7/lib/python2.7/site-packages/scipy/interpolate/dfitpack.so --fcompiler=gfortran -c -m sersic sersic.f

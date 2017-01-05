@@ -1,0 +1,13 @@
+sz = np.load('/data/ljo31/Lens/LensParams/SourceRedshifts.npy')[()]
+lz = np.load('/data/ljo31/Lens/LensParams/LensRedshifts.npy')[()]
+
+for name in sz.keys():
+    # orig
+    result = np.load('/data/ljo31b/EELs/esi/kinematics/inference/'+name)
+    lp,trace,dic,_=result
+    np.savetxt('//data/ljo31b/EELs/esi/kinematics/inference/cornerplot_chains/'+name'+.dat',np.column_stack((dic['lens dispersion'][400:].ravel(),dic['source dispersion'][400:].ravel())))
+    # wide
+    result = np.load('/data/ljo31b/EELs/esi/kinematics/inference/wide/'+name)
+    lp,trace,dic,_=result
+    np.savetxt('//data/ljo31b/EELs/esi/kinematics/inference/cornerplot_chains/wide_'+name'+.dat',np.column_stack((dic['lens dispersion'][400:].ravel(),dic['source dispersion'][400:].ravel())))
+    print name, dic['lens dispersion'][400:].shape

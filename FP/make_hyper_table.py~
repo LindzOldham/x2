@@ -1,0 +1,18 @@
+import numpy as np
+
+dir = '/data/ljo31b/EELs/FP/inference/FP_infer_'
+results = ['gNFW_gamma_HYPER', 'gNFW_12_HYPER','NFW_12_HYPER']
+
+for file in results:
+    print file
+    result = np.load(dir+file)
+    lp,trace,dic,_ = result
+    a1,a2 = np.unravel_index(lp.argmax(),lp.shape)
+    #med = [dic[key][a1,a3] for key in dic.keys()]
+    #lo = [np.percentile(dic[key][4000:].ravel(),16) for key in dic.keys()]
+    #hi = [np.percentile(dic[key][4000:].ravel(),84) for key in dic.keys()]
+    for key in dic.keys():
+        med = dic[key][a1,a3]
+        lo = np.percentile(dic[key][4000:].ravel(),16)
+        hi = np.percentile(dic[key][4000:].ravel(),84)
+        print key, '%.2f'%med, '$\pm$', '%.2f'%np.mean((med-lo,hi-med))

@@ -9,7 +9,6 @@ class AdaptiveSource:
         else:
             i = int(pix.size/gridsize)
             self.indxpix = numpy.arange(pix.size)[::i]
-            print self.indxpix.size,gridsize
             gridsize = self.indxpix.size
 
         self.gridsize = gridsize
@@ -95,7 +94,6 @@ class AdaptiveSource:
         x,y = self.pnts.T
         srcPix = self.grid.find_simplex(self.pnts)
         cond = srcPix>-1
-        #x,y,srcPix = x[cond],y[cond],srcPix[cond]
         gridVerts = self.grid.simplices[srcPix]
 
         (x1,x2,x3),(y1,y2,y3) = self.gridpnts[gridVerts].T
@@ -111,8 +109,7 @@ class AdaptiveSource:
         c = numpy.zeros(row.size*3)
         v = numpy.zeros(row.size*3)
 
-        #cond = (wa>=0)&(wb>=0)&(wc>=0)&(wa<=1.)&(wb<=1.)&(wc<=1.)
-        cond *= 1.
+        cond = cond*1.
         for i in range(3):
             S = slice(i*row.size,(i+1)*row.size,1)
             r[S] = row.copy()
@@ -142,11 +139,12 @@ class AdaptiveSource:
         OKN = IND.sum(1)==1
         xn = x1+(y3-y1)*(x2-x1)/(y2-y1)
 
-        dcq = gx-xn
+        dcq = abs(gx-xn)
         dab = ((x1-x2)**2+(y1-y2)**2)**0.5
         dqa = ((x1-xn)**2+(y1-y3)**2)**0.5
         dqb = ((x2-xn)**2+(y2-y3)**2)**0.5
         dcq[dcq==0] = 1e-11
+
 
         # Find positive-x pixels
         dxp = numpy.array([gx+1e-7,gy]).T
@@ -160,7 +158,7 @@ class AdaptiveSource:
         OKP = IND.sum(1)==1
         xp = x1+(y3-y1)*(x2-x1)/(y2-y1)
 
-        dcp = gx+xp
+        dcp = abs(gx-xp)
         dde = ((x1-x2)**2+(y1-y2)**2)**0.5
         dpd = ((x1-xp)**2+(y1-y3)**2)**0.5
         dpe = ((x2-xp)**2+(y2-y3)**2)**0.5
@@ -227,7 +225,7 @@ class AdaptiveSource:
         OKN = IND.sum(1)==1
         yn = y1+(x3-x1)*(y2-y1)/(x2-x1)
 
-        dcq = gy-yn
+        dcq = abs(gy-yn)
         dab = ((x1-x2)**2+(y1-y2)**2)**0.5
         dqa = ((x1-x3)**2+(y1-yn)**2)**0.5
         dqb = ((x2-x3)**2+(y2-yn)**2)**0.5
@@ -246,7 +244,7 @@ class AdaptiveSource:
         OKP = IND.sum(1)==1
         yp = y1+(x3-x1)*(y2-y1)/(x2-x1)
 
-        dcp = gy+yp
+        dcp = abs(gy-yp)
         dde = ((x1-x2)**2+(y1-y2)**2)**0.5
         dpd = ((x1-x3)**2+(y1-yp)**2)**0.5
         dpe = ((x2-x3)**2+(y2-yp)**2)**0.5
@@ -297,7 +295,6 @@ class AdaptiveSource:
             c[S] = C[i][OK]
             v[S] = W[i][OK]
 
-
         sy = coo_matrix((v,(r,c)),shape=(A.size,A.size))
 
         self.rmat = sx.T*sx+sy.T*sy
@@ -320,6 +317,7 @@ class AdaptiveSource:
 
         gV = gridVerts
         src = wa*vals[gV[:,0]]+wb*vals[gV[:,1]]+wc*vals[gV[:,2]]
+
         if domask:
             src[~C] = numpy.nan
             return src
@@ -350,13 +348,15 @@ def fastAAT(a):
 
 def getModelG(img,var,mat,cmat,rmat=None,reg=None,niter=10):
     from scikits.sparse.cholmod import cholesky
-    from scipy.sparse import hstack
+    from scipy.sparse import csc_matrix
     import numpy
-    rhs = mat.T*(img/var)
+    import pixellatedTools as pT
+    rhs = mat.T*csc_matrix(img/var).T
 
     B = fastAAT(cmat*mat)
+    #B = pT.fastMult(mat.T,cmat*mat)
 
-    if rmat is not None:
+    if rmat is not None and reg is not None:
         lhs = B+rmat*reg
         regs = [reg]
     else:
@@ -364,11 +364,25 @@ def getModelG(img,var,mat,cmat,rmat=None,reg=None,niter=10):
         lhs = B
         reg = 0
 
-    i = 0
     F = cholesky(lhs)
-    fit = F(rhs)
+    fit = F(rhs).data.ravel()
+    """
+    from scipy.sparse import linalg
+    print 'chol',fit
+
+    fit = linalg.lsmr(lhs,rhs,atol=1e-13,btol=1e-13)[0]
+    print 'smr',fit
+
+    rhs = (img/var**0.5)
+    lhs = cmat*mat
+    fit = linalg.lsmr(lhs,rhs,atol=1e-13,btol=1e-13)[0]
+    print 'smr2',fit
+    fit = ffit
+    """
+
+    i = 0
     res = 0.
-    if rmat is not None:
+    if rmat is not None and reg>0:
       for i in range(niter):
         res = fit.dot(rmat*fit)
 
@@ -383,8 +397,8 @@ def getModelG(img,var,mat,cmat,rmat=None,reg=None,niter=10):
         regs.append(reg)
         lhs = B+regs[-1]*rmat
         F = F.cholesky(lhs)
-        fit = F(rhs)
-        res = -0.5*res*regs[-1]
+        fit = F(rhs).data.ravel()
+      res = -0.5*res*regs[-1]
     res += -0.5*((mat*fit-img)**2/var).sum()
 
     return res,fit,mat*fit,rhs,(reg,i)

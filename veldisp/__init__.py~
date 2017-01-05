@@ -1,0 +1,37 @@
+#import vdfit as vd 
+from tools import plot,showContours,showVel,showSigma
+import os
+
+dir = os.path.dirname(__file__)
+ESITEMPS = ['scHR14wc_new.fits','scHR19wc_new.fits','scHR224wc_new.fits','scHR22wc_new.fits','scHR279wc_new.fits','scHR40wc_new.fits','scHR4wc_new.fits','scHR60wc_new.fits']
+for i in range(len(ESITEMPS)):
+	ESITEMPS[i] = dir+"/esitemps/"+ESITEMPS[i]
+
+ESITEMPS2 = []
+for i in [1,3,4,5,6,7]:
+	ESITEMPS2.append(ESITEMPS[i])
+
+INDOTEMPS = ['102328_K3III.fits','163588_K2III.fits','107950_G5III.fits',
+                '124897_K1III.fits','168723_K0III.fits','111812_G0III.fits',
+                '148387_G8III.fits']
+
+for i in range(len(INDOTEMPS)):
+        INDOTEMPS[i] = dir+"/indous/"+INDOTEMPS[i]
+
+INDO_A = [i for i in INDOTEMPS]
+INDO_A.append(dir+"/indous/188350_A0III.fits")
+
+INDO_F = [i for i in INDOTEMPS]
+INDO_F.append(dir+"/indous/115604_F2III.fits")
+
+INDO_AF = [i for i in INDOTEMPS]
+INDO_AF.append(dir+"/indous/188350_A0III.fits")
+INDO_AF.append(dir+"/indous/115604_F2III.fits")
+
+INDOTEMPSUN = [i for i in INDOTEMPS]
+INDOTEMPSUN.append(dir+"/indous/SUN_III.fits")
+
+SDSSTEMPS = []
+for i in range(32):
+    SDSSTEMPS.append(dir+"/sdss/SDSS_%02d.fits"%i)
+

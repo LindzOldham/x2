@@ -1,0 +1,393 @@
+import scipy,numpy
+import special_functions as sf
+from scipy import ndimage,optimize,signal,interpolate
+from numpy import linalg
+from math import sqrt,log,log10
+#import sys
+#sys.path.insert(0,'/data1/homedirs/mauger/python')
+#from openopt import LLSP
+
+light = 299792.458
+
+def Nmultinvert(lhs,rhs):
+    res = linalg.lstsq(lhs,rhs)[0]
+    return res,((numpy.dot(lhs,res)-rhs)**2).sum()**0.5
+ 
+
+def finddispersion(scispec,varspec,tmpspec,tmpwave,outwave,tmpscale,z,regions=None,nfit=7,sigma=200.,pixmask=None,nmult=1,rmask=None,omask=None,niter=None,smin=5.,smax=501.,bias=5.):
+    import pymc
+    linsolve = optimize.nnls
+
+    # Make the mask
+    size = outwave.size
+    mask = scipy.ones(size)
+    zwave = outwave + log10(1.+z)
+
+    # The full spectrum is initially masked
+    mask = scipy.zeros(size)
+
+    # Set default region
+    if regions is None:
+    #    regions = [[4230,4435],[5205,5605]] # Gband and Mgb
+        regions = [[4700,5900]]
+
+    # Unmask regions of the spectrum to be used in the analysis
+    for lo,hi in regions:
+        mask = unset_mask(mask,lo,hi,outwave)
+
+    # Mask bad pixels
+    if pixmask is not None:
+        mask[pixmask==1] = 0
+
+    # Mask specified rest- and observed-frame regions
+    if rmask is not None:
+        for lo,hi in rmask:
+            mask = set_mask(mask,lo,hi,outwave)
+    if omask is not None:
+        for lo,hi in omask:
+            mask = set_mask(mask,lo,hi,zwave)
+
+    # Remask regions that should never be used
+    mask = mask_bad(mask,outwave,zwave)
+
+    coords = scipy.where(mask)[0]
+    # Determine the total size of the linear fit:
+    #   nregions*[fit order + 1] continuum coefficients + # of templates
+    nregions = len(regions)
+    ntemps = len(tmpspec)
+    ntotal = nregions*(nfit+1) + ntemps
+
+    sci = scispec.copy()
+    out = outwave.copy()
+    zwave_orig = zwave.copy()
+    vspec = varspec.copy()
+
+    # Inverse variance weighting is used
+    ivar = 1./varspec[coords]
+
+    scispec = scispec[coords]
+    optVar = vspec[coords]**0.5
+
+    outwave = outwave[coords]
+    evalpnts = scipy.empty((outwave.size,2))
+    zwave = zwave[coords]
+    isig = scipy.sqrt(ivar)
+
+    w0 = (10**outwave)[0]
+
+    # Define the continuum on the range [0,1]
+    pretend = outwave.copy()
+    pretend -= outwave[0]
+    pol1,pol2 = outwave[0],pretend[-1]
+    pretend /= pretend[-1]
+
+    # Create the polynomial fit components
+    operator = scipy.zeros((scispec.size,ntotal))
+    BIAS = scispec*0.+bias
+    for i in range(ntemps,ntemps+nregions):
+        cond = (outwave>=log10(regions[i-ntemps][0]))&(outwave<=log10(regions[i-ntemps][1]))
+        operator[:,i][cond] = 1.
+    for i in range(1,1+nfit):
+        p = scipy.zeros((nfit+1,1))
+        p[i] = 1.
+        coeff = {'coeff':p,'type':'legendre'}
+        poly = sf.genfunc(pretend,0.,coeff)
+        BIAS += bias*poly
+        for j in range(nregions):
+            k = (i)*nregions+j+ntemps
+            cond = (outwave>=log10(regions[j][0]))&(outwave<=log10(regions[j][1]))
+            operator[:,k][cond] = poly[cond]
+
+
+    oper = operator.T
+
+    def dolinfit(v,s,r=None):
+        ow = outwave+log10(1.+v/light)
+        response = numpy.ones(ow.size)
+        for k in range(ntemps):
+            oper[k] = interpolate.bisplev(s,ow,tmpspec[k])
+        for l in range(1,nmult):
+            response += r[l-1]*((10**outwave-w0)/w0)**l
+        op = (isig*oper/response).T
+        rhs = (scispec*response+BIAS)*isig/response
+        fit,chi = linsolve(op,rhs)
+        return fit,chi,response
+
+    O = outwave*0
+    NORM = outwave.size**0.5
+    def opt(p,mod=False):
+        response = scispec*0.+1
+        v,s = p[:2]
+        if s>smax or s<smin or v<-350. or v>350.:
+            return scispec/optVar
+        fit,chi,response = dolinfit(v,s,p[2:])
+        if mod==True:
+            return fit,chi
+        return O+chi/NORM
+    start = [1.,sigma]
+    for i in range(nmult-1):
+        start.append(0.)
+    coeff,cov,t1,t2,ier = optimize.leastsq(opt,start,full_output=1)
+
+    v,s = coeff[:2]
+    ml_v = v
+    ml_s = s
+
+    response = scispec*0.+1
+    for l in range(1,nmult):
+        response += coeff[1+l]*((10**outwave-w0)/w0)**l
+    rhs = (scispec*response+BIAS)*isig/response
+
+    def opt2(v,s):
+        if s>smax or s<smin or v<-350. or v>350.:
+            return scispec/optVar
+        ow = outwave+log10(1.+v/light)
+        for k in range(ntemps):
+            oper[k] = interpolate.bisplev(s,ow,tmpspec[k])
+        op = (isig*oper/response).T
+        result2 = linsolve(op,rhs)
+        return 0.5*result2[1]**2
+
+    # Calculate 2-sided Hessian
+    calcCov = True
+    try:
+        chimin = opt2(v,s)
+        ev = (opt2(v+1.,s)-2*chimin+opt2(v-1.,s))**-0.5
+        ev2 = ((opt2(v+ev,s)-2*chimin+opt2(v-ev,s))/ev**2)**-0.5
+        Hv = (opt2(v+ev2/2.,s)-2*chimin+opt2(v-ev2/2.,s))/(ev2/2.)**2
+        es = (opt2(v,s+0.01*s)-2*chimin+opt2(v,s-0.01*s))**-0.5
+        es2 = ((opt2(v,s+es/2.)-2*chimin+opt2(v,s-es/2.))/(es/2)**2)**-0.5
+        Hs = (opt2(v,s+es2/2.)-2*chimin+opt2(v,s-es2/2.))/(es2/2.)**2
+        off = (opt2(v+ev/2,s+es/2)-opt2(v+ev/2,s-es/2)-opt2(v-ev/2,s+es/2)+opt2(v-ev/2,s-es/2))/(ev*es)
+        H = numpy.array([[Hv,off],[off,Hs]])
+        cov = numpy.linalg.inv(H)
+        calcCov = False
+    except:
+        ev,es = 20.,20.
+        cov = numpy.array([[20.,0.],[0.,20.]])
+        #print "Using covariance matrix",cov
+
+    # Ensure valid parameters are used to start
+    vel = pymc.Uniform('vel',-350.,350.,value=v)
+    sigma = pymc.Uniform('sigma',smin,smax,value=s)
+    if nmult>1:
+        resp = [pymc.Uniform('resp_%d'%i,-2*10**i,2*10**i,value=coeff[i+1]) for i in range(1,nmult)]
+    else:
+        resp = []
+
+    while 1:
+        try:
+            tmp = vel.logp
+            break
+        except:
+            vel.value = v+numpy.random.randn()*ev/2.
+    while 1:
+        try:
+            tmp = sigma.logp
+            break
+        except:
+            sigma.value = s+numpy.random.randn()*es/2.
+
+    @pymc.deterministic
+    def logprob(value=0.,sigma=sigma,vel=vel):
+        fit,chi,response = dolinfit(vel,sigma,[r.value for r in resp])
+        lp = -0.5*chi**2-numpy.log(isig/response).sum()
+        return lp
+
+    @pymc.observed
+    def logp(value=0.,lp=logprob):
+        return lp
+
+    from SampleOpt import Sampler
+    nochain = True
+    if niter is None:
+        niter = 200
+    if calcCov==True:
+        objs = [vel,sigma]
+        if nmult>1:
+            objs += resp
+            C = numpy.zeros((nmult+1,nmult+1))
+            C[:2,:2] = cov
+            for i in range(1,nmult):
+                C[i+1,i+1] = abs(coeff[i+1])/50.
+            cov = C.copy()
+            #cov = numpy.concatenate((cov,abs(coeff[2:])/10.))
+        S = Sampler(objs,[logp],[logprob])
+        S.setCov(cov)
+        S.stretch = None
+        S.sample(niter*2)
+        cov = numpy.cov(S.trace.T)
+    else:
+        if nmult>1:
+            C = numpy.zeros((nmult+1,nmult+1))
+            C[:2,:2] = cov
+            for i in range(1,nmult):
+                C[i+1,i+1] = abs(coeff[i+1])/50.
+            cov = C.copy()
+    objs = [vel,sigma]
+    if nmult>1:
+        objs += resp
+        S = Sampler(objs,[logp],[logprob])
+        S.setCov(cov)
+        S.stretch = None
+        S.sample(niter)
+    S = Sampler(objs,[logp],[logprob])
+    S.setCov(cov)
+    S.stretch = None
+    S.sample(niter*2)
+    logps,trace,result = S.result()
+
+    vel = result['vel']#[niter:]
+    sigma = result['sigma']#[niter:]
+    errors = [sigma.std(),vel.std()]
+
+    MLpos = logps.argmax()
+    velML = vel[MLpos]
+    sigmaML = sigma[MLpos]
+    response = scispec*0.+1
+    if nmult>1:
+        for i in range(1,nmult):
+            response += result['resp_%d'%i][MLpos]*((10**outwave-w0)/w0)**i
+
+    ow = outwave+log10(1.+velML/light)
+    for k in range(ntemps):
+        oper[k] = interpolate.bisplev(sigmaML,ow,tmpspec[k])
+    op = (isig*oper/response).T
+    rhs = (scispec*response+BIAS)*isig/response
+    res = linsolve(op,rhs)
+    sol = res[0]
+    for i in range(1,nfit+2):
+        sol[-i] -= bias
+
+    # A quick way to get an approximate handle on the continuum (the shape
+    #   will be nearly correct, though the normalization is affected by
+    #   the templates--this approximates the normalization).
+    oper = oper.T
+    op = oper.copy()
+    op[:,0] = oper[:,0].mean()
+    continuum = scipy.dot(op,sol)
+    outmodel = scipy.dot(oper,sol)
+
+
+    """
+    PREPARE OUTPUT SPECTRA
+    """
+    scispec = sci.copy()
+    outwave = out.copy()
+    zwave = zwave_orig.copy()
+    varspec = vspec.copy()
+
+    scispec[mask==0] = scipy.nan
+    newmask = scipy.zeros(scispec.size)
+    for lo,hi in regions:
+        newmask[(10**outwave>lo)&(10**outwave<hi)] = 1.
+
+    coords = scipy.where(newmask)[0]
+    # Inverse variance weighting is used
+    #weight = scipy.identity(coords.size,scipy.float64)
+    weight = 1./varspec[coords]
+    outwave = outwave[coords]
+    evalpnts = scipy.empty((outwave.size,2))
+    scispec = scispec[coords]
+    zwave = zwave[coords]
+
+    varspec = scipy.sqrt(weight)
+
+    # Define the continuum on the range [0,1]
+    pretend = outwave.copy()
+#    pretend -= outwave[0]
+#    pretend /= pretend[-1]
+    pretend -= pol1
+    pretend /= pol2
+
+
+    # Create the polynomial fits
+    operator = scipy.zeros((scispec.size,ntotal))
+    for i in range(ntemps,ntemps+nregions):
+        cond = (outwave>=log10(regions[i-ntemps][0]))&(outwave<=log10(regions[i-ntemps][1]))
+        operator[:,i][cond] = 1.
+    for i in range(1,1+nfit):
+        p = scipy.zeros((nfit+1,1))
+        p[i] = 1.
+        coeff = {'coeff':p,'type':'legendre'}
+        poly = sf.genfunc(pretend,0.,coeff)
+        for j in range(nregions):
+            k = (i)*nregions+j+ntemps
+            cond = (outwave>=log10(regions[j][0]))&(outwave<=log10(regions[j][1]))
+            operator[:,k][cond] = poly[cond]
+
+
+    oper = operator.copy()
+    #evalpnts[:,0] = sigma.mean()
+    #evalpnts[:,1] = outwave+log10(1.+vel.mean()/299792.)
+    ow = outwave+log10(1.+velML/light)
+    for k in range(ntemps):
+        #corr = tmpspec[k].eval(evalpnts)
+        oper[:,k] = interpolate.bisplev(sigmaML,ow,tmpspec[k])
+        #for l in range(nmult):
+        #    oper[:,k*nmult+l] = corr*((10**outwave-w0)/w0)**l
+    orig = outmodel.copy()
+    outmodel = scipy.dot(oper,sol)
+    continuum = scipy.dot(operator,sol)
+
+    response = scispec*0.+1
+    if nmult>1:
+        for i in range(1,nmult):
+            response += result['resp_%d'%i][MLpos]*((10**outwave-w0)/w0)**i
+    resp2 = sci*0.+1
+    if nmult>1:
+        for i in range(1,nmult):
+            resp2 += result['resp_%d'%i][MLpos]*((10**out-w0)/w0)**i
+
+    return {'vel':vel.mean(),'sigma':sigma.mean(),'errors':errors,'model':outmodel,'continuum':continuum,'science':scispec*response,'wave':10**outwave,'fullsci':sci*resp2,'fullwave':10**out,'mask':mask,'solution':sol,'velchain':vel,'sigmachain':sigma,'cov':cov,'vel_ML':ml_v,'sigma_ML':ml_s,'verror_ML':ev,'serror_ML':es}
+
+
+
+
+
+# Mask unuseable parts of spectrum--it might be better if this wasn't
+#   hard-coded....
+def mask_bad(mask,wave1,wave2):
+    # A-band
+#    mask = set_mask(mask,7590,7720,wave2)
+    mask = set_mask(mask,7590,7720,wave1)
+    # B-band
+#    mask = set_mask(mask,6860,6900,wave2)
+#    mask = set_mask(mask,6870,6890,wave2)
+    mask = set_mask(mask,6860,6900,wave1)
+    # OII
+#    mask = set_mask(mask,3721,3733,wave1)
+    # OIII
+#    mask = set_mask(mask,4999,5015,wave1)
+#    mask = set_mask(mask,4951,4967,wave1)
+    # Halpha
+#    mask = set_mask(mask,6541,6585,wave1)
+    # Hbeta
+#    mask = set_mask(mask,4852,4877,wave1)
+    # Hgamma
+#    mask = set_mask(mask,4333,4347,wave1)
+    # Hdelta 
+#    mask = set_mask(mask,4095,4109,wave1)
+    # Bad parts of template
+#    mask = set_mask(mask,4460,4540,wave1)
+
+    return mask
+
+
+# Helper functions to set/unset the mask based upon wavelength range inputs
+
+# Set mask bits to zero
+def set_mask(mask,start,end,wave):
+    start = log10(start)
+    end = log10(end)
+    cond = scipy.where((wave>start)&(wave<end))
+    mask[cond] = 0.
+    return mask
+
+# Set mask bits to one
+def unset_mask(mask,start,end,wave):
+    start = log10(start)
+    end = log10(end)
+    cond = scipy.where((wave>start)&(wave<end))
+    mask[cond] = 1.
+    return mask

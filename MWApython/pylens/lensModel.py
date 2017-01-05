@@ -39,11 +39,12 @@ def lensModel(inpars,image,sig,gals,lenses,sources,xc,yc,OVRS=1,csub=11,psf=None
     return -0.5*(resid**2).sum()
 
 
-def lensFit(inpars,image,sig,gals,lenses,sources,xc,yc,OVRS=1,csub=5,psf=None,mask=None,noResid=False,verbose=False,getModel=False,showAmps=True,allowNeg=False):
+def lensFit(inpars,image,sig,gals,lenses,sources,xc,yc,OVRS=1,csub=5,psf=None,mask=None,noResid=False,verbose=False,getModel=False,showAmps=False,allowNeg=False):
     import pylens,numpy
     import indexTricks as iT
     from imageSim import convolve
     from scipy import optimize
+
 
     if noResid==True or getModel==True:
         mask = None
@@ -118,8 +119,7 @@ def lensFit(inpars,image,sig,gals,lenses,sources,xc,yc,OVRS=1,csub=5,psf=None,ma
     op = (model/sigin).T
 
     fit,chi = optimize.nnls(op,rhs)
-    if showAmps is True:
-        print 'fit', fit
+
     if getModel is True:
         j = 0
         for m in gals+sources:

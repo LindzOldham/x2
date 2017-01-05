@@ -52,6 +52,27 @@ class SIE(PowerLaw):
         PowerLaw.__init__(self,name,pars)
 
 
+class SIS(MassModel,MassProfiles.SIS):
+    _baseProfile = MassProfiles.SIS
+    _MMkeys = [['b','x','y']]
+
+    def __init__(self,name,pars):
+        MassModel.__init__(self,name,pars)
+
+
+"""
+class PIEMD(MassModel,MassProfiles.PIEMD):
+    _baseProfile = MassProfiles.PIEMD
+    __MMkeys = [['b','pa','q','rs','x','y'],
+                ['b','pa','q','rs','x','y'],
+                ['b','q','rs','theta','x','y'],
+                ['b','q','rs','theta','x','y']]
+
+    def __init__(self,name,pars):
+        MassModel.__init__(self,name,pars)
+"""
+
+
 class ExtShear(MassModel,MassProfiles.ExtShear):
     _baseProfile = MassProfiles.ExtShear
     _MMkeys = [['b','pa','x','y'],['b','theta','x','y']]
@@ -129,3 +150,150 @@ class sNFW(MassModel,MassProfiles.sNFW):
 
     def __setattr__(self,key,value):
         self.__dict__[key] = value
+
+
+class eNFWp(MassModel,MassProfiles.eNFWp):
+    _baseProfile = MassProfiles.eNFWp
+    _MMkeys = [['b','pa','q','rs','x','y'],
+                ['b','q','rs','theta','x','y']]
+
+    def __init__(self,name,pars):
+        MassModel.__init__(self,name,pars)
+
+    def __setattr__(self,key,value):
+        if key=='pa':
+            self.__dict__['pa'] = value
+            if value is not None:
+                self.__dict__['theta'] = value*pi/180.
+        elif key=='theta':
+            if value is not None:
+                self.__dict__['pa'] = value*180./pi
+            self.__dict__['theta'] = value
+        else:
+            self.__dict__[key] = value
+
+
+class Jaffe(MassModel,MassProfiles.Jaffe):
+    _baseProfile = MassProfiles.Jaffe
+    _MMkeys = [['b','rs','x','y']]
+
+    def __init__(self,name,pars):
+        MassModel.__init__(self,name,pars)
+
+    def __setattr__(self,key,value):
+        self.__dict__[key] = value
+
+
+class dPIE(MassModel,MassProfiles.dPIE):
+    _baseProfile = MassProfiles.dPIE
+    _MMkeys = [['b','pa','q','rs','x','y'],
+                ['b','q','rs','theta','x','y']]
+
+    def __init__(self,name,pars):
+        MassModel.__init__(self,name,pars)
+
+    def __setattr__(self,key,value):
+        if key=='pa':
+            self.__dict__['pa'] = value
+            if value is not None:
+                self.__dict__['theta'] = value*pi/180.
+        elif key=='theta':
+            if value is not None:
+                self.__dict__['pa'] = value*180./pi
+            self.__dict__['theta'] = value
+        else:
+            self.__dict__[key] = value
+
+
+class sGNFW(MassModel,MassProfiles.sGNFW):
+    _baseProfile = MassProfiles.sGNFW
+    _MMkeys = [['b','eta','rs','x','y']]
+
+    def __init__(self,name,pars):
+        MassModel.__init__(self,name,pars)
+
+    def __setattr__(self,key,value):
+        self.__dict__[key] = value
+
+
+'''class Disk(MassModel,MassProfiles.Disk):
+    _baseProfile = MassProfiles.Disk
+    _MMkeys = [['b','pa','q','x','y']]
+
+    def __init__(self,name,pars):
+        MassModel.__init__(self,name,pars)
+
+    def __setattr__(self,key,value):
+        self.__dict__[key] = value'''
+
+
+class DPL(MassModel,MassProfiles.DPL):
+    _baseProfile = MassProfiles.DPL
+    _MMkeys = [['b','eta1','eta2','pa','q','rs','x','y'],
+                ['b','eta1','eta2','q','rs','theta','x','y']]
+
+    def __init__(self,name,pars):
+        MassModel.__init__(self,name,pars)
+        
+    def __setattr__(self,key,value):
+        if key=='pa':
+            self.__dict__['pa'] = value
+            if value is not None:
+                self.__dict__['theta'] = value*pi/180.
+        elif key=='theta':
+            if value is not None:
+                self.__dict__['pa'] = value*180./pi
+            self.__dict__['theta'] = value
+        else:
+            self.__dict__[key] = value
+
+
+class DPL_2(MassModel,MassProfiles.DPL_2):
+    _baseProfile = MassProfiles.DPL_2
+    _MMkeys = [['b','eta','pa','q','rs','x','y'],
+                ['b','eta','q','rs','theta','x','y']]
+
+    def __init__(self,name,pars):
+        MassModel.__init__(self,name,pars)
+        
+    def __setattr__(self,key,value):
+        if key=='pa':
+            self.__dict__['pa'] = value
+            if value is not None:
+                self.__dict__['theta'] = value*pi/180.
+        elif key=='theta':
+            if value is not None:
+                self.__dict__['pa'] = value*180./pi
+            self.__dict__['theta'] = value
+        else:
+            self.__dict__[key] = value
+
+
+class eGNFW(MassModel,MassProfiles.eGNFW):
+    _baseProfile = MassProfiles.eGNFW
+    _MMkeys = [['b', 'gammain', 'pa', 'q', 'rs', 'trunc', 'x', 'y']]
+
+    def __init__(self,name,pars):
+        MassModel.__init__(self,name,pars)
+
+    def __setattr__(self,key,value):
+        self.__dict__[key] = value
+
+class eGNFWG(MassModel,MassProfiles.eGNFWG):
+    _baseProfile = MassProfiles.eGNFWG
+    _MMkeys = [['b', 'gammain', 'pa', 'q', 'rs', 'x', 'y']]
+
+    def __init__(self,name,pars):
+        MassModel.__init__(self,name,pars)
+
+    def __setattr__(self,key,value):
+        if key=='pa':
+            self.__dict__['pa'] = value
+            if value is not None:
+                self.__dict__['theta'] = value*pi/180.
+        elif key=='theta':
+            if value is not None:
+                self.__dict__['pa'] = value*180./pi
+            self.__dict__['theta'] = value
+        else:
+            self.__dict__[key] = value

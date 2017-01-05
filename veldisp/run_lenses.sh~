@@ -1,0 +1,15 @@
+#nice -n 10 python esi_indous_vdfit_lenses.py J0837 1.00 lens 8
+
+#nice -n 10 python esi_indous_vdfit_lenses.py J1446 1.00 lens 8
+nice -n 10 python esi_indous_vdfit_lenses.py J1605 1.00 lens 8
+nice -n 10 python esi_indous_vdfit_lenses.py J1606 1.00 lens 8
+nice -n 10 python esi_indous_vdfit_lenses.py J1619 1.00 lens 8
+nice -n 10 python esi_indous_vdfit_lenses.py J2228 1.00 lens 8
+
+nice -n 10 python esi_indous_vdfit_lenses.py J0901 1.00 lens 8
+nice -n 10 python esi_indous_vdfit_lenses.py J0913 1.00 lens 8
+nice -n 10 python esi_indous_vdfit_lenses.py J1125 1.00 lens 8
+nice -n 10 python esi_indous_vdfit_lenses.py J1144 1.00 lens 8
+nice -n 10 python esi_indous_vdfit_lenses.py J1218 1.00 lens 8
+nice -n 10 python esi_indous_vdfit_lenses.py J1323 1.00 lens 8
+nice -n 10 python esi_indous_vdfit_lenses.py J1347 1.00 lens 8

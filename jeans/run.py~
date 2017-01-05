@@ -1,0 +1,9 @@
+import numpy as np, pylab as pl, pyfits as py
+import cPickle
+from makemodel import *
+
+masses = np.load('/data/ljo31b/EELs/inference/new/masses_212.npy')
+logM = masses[3]
+dlogM = np.mean((masses[4],masses[5]),axis=0)
+Mhalo = buildhalo(10**logM)
+print Mhalo

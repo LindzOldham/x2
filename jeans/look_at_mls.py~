@@ -1,0 +1,20 @@
+from tools import solarmag
+import numpy as np, pylab as pl, pyfits as py
+import cPickle
+from makemodel import *
+from astLib import astCalc
+from imageSim import SBObjects
+from itertools import product
+
+cat = cPickle.load('/data/ljo31/public_html/Lens/phys_models/synthetic_both/n=6/ML_CATALOGUE')
+Mstar = np.array([cat[i][0] for i in range(len(cat))])
+re_norm = np.array([cat[i][2] for i in range(len(cat))])
+re_nugg = np.array([cat[i][3] for i in range(len(cat))])
+rhalo = np.array([cat[i][4] for i in range(len(cat))])
+Mhalo = np.array([cat[i][5] for i in range(len(cat))])
+vd_norm = np.array([cat[i][6] for i in range(len(cat))])
+vd_nugg = np.array([cat[i][7] for i in range(len(cat))])
+
+Mtot = np.log10(10**Mstar + 10**Mhalo)
+logrnugg = np.log10(re_nugg)
+logrnorm = np.log10(re_norm)

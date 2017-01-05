@@ -1,0 +1,4 @@
+f2py -c -m matmult matmult.f
+f2py -c -m powerlaw powerlaw.f
+f2py -c -m sersic sersic.f
+

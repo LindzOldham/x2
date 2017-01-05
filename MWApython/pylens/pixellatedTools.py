@@ -34,25 +34,39 @@ def getPSFMatrix(psf,imshape,mask=None):
 
     pmat = coo_matrix((pvals,(col,row)),shape=(imsize,imsize))
     if mask is not None:
-        npnts = mask.sum()
-        c = numpy.arange(imsize)[mask.ravel()]
-        r = numpy.arange(npnts)
-        smat = coo_matrix((numpy.ones(npnts),(c,r)),shape=(imsize,npnts))
-        pmat = smat.T*(pmat*smat)
+        a = numpy.arange(mask.size)
+        cols = a[mask.ravel()]
+        pmat = pmat.tocsr()[:,cols].tocsc()[cols]
+#        npnts = mask.sum()
+#        c = numpy.arange(imsize)[mask.ravel()]
+#        r = numpy.arange(npnts)
+#        smat = coo_matrix((numpy.ones(npnts),(c,r)),shape=(imsize,npnts))
+#        pmat = smat.T*(pmat*smat)
     return pmat
 
 
 def maskPSFMatrix(pmat,mask):
     import numpy
-    from scipy.sparse import coo_matrix
+    from scipy.sparse import coo_matrix,diags,lil_matrix
+
+    a = numpy.arange(mask.size)
+    cols = a[mask.ravel()]
+    J = pmat.tocsr()[:,cols].tocsc()[cols]
+    return J
+
+"""
+def bob():
+    c = diags(mask.ravel()*1.,0)
+    J = c*(maspmat*c)
+    return lil_matrix(J
 
     imsize = pmat.shape[0]
     npnts = mask.sum()
     c = numpy.arange(imsize)[mask.ravel()]
     r = numpy.arange(npnts)
-    smat = coo_matrix((numpy.ones(npnts),(c,r)),shape=(imsize,npnts))
+    smat = coo_matrix((numpy.ones(npnts)*1.,(c,r)),shape=(imsize,npnts))
     return smat.T*(pmat*smat)
-
+"""
 
 def getRegularizationMatrix(srcxaxis,srcyaxis,mode="curvature"):
     import numpy

@@ -1,0 +1,9 @@
+import scipy,numpy,cPickle
+import special_functions as sf
+from scipy import ndimage,optimize,signal,interpolate
+from numpy import linalg
+from math import sqrt,log,log10
+import pymc, myEmcee_blobs as myEmcee
+import numpy as np, pylab as pl
+
+''' read in results and examine as a function of aperture! '''

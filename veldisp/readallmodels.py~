@@ -1,0 +1,10 @@
+import pyfits as py, numpy as np, pylab as pl
+
+dir = '/data/ljo31b/EELs/esi/kinematics/inference/J0837_'
+files = ['poly_noextrap_fin_chain.txt', 'picklesextrap.txt','blue_final_chain.txt', 'kurucz.txt','stitch5000.txt','stitch4000.txt']
+
+print r'model & $v_l$ & $\sigma_l$ & $v_s$ & $\sigma_s$ \\\hline'
+for i in range(len(files)):
+    chain = np.loadtxt(fir+files[i])
+    vl,sl,vs,ss = map(lambda v:(v[1],v[2]-v[1],v[1]-v[0]),zip(*np.percentile(chain, [16,50,84],axis=0)))
+    print ' & $', '%.2f'%vl[0], '\pm', '%.2f'%vl[1], '$ & $', '%.2f'%sl[0], '\pm', '%.2f'%sl[1], '$ & $', '%.2f'%vs[0], '\pm', '%.2f'%vs[1], '$ & $', '%.2f'%ss[0], '\pm', '%.2f'%ss[1], r'\\'

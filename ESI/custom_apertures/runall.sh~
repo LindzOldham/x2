@@ -1,0 +1,10 @@
+#!/bin/bash
+# nb. wid is in arcseconds and is the radius
+
+nice -n 10 python stitchvd2_may2014_apertures_sep.py J1347 1.00 lens
+nice -n 10 python stitchvd2_may2014_apertures_sep.py J1347 1.00 source
+nice -n 10 python stitchvd2_may2014_apertures_sep.py J1347 2.00 lens
+nice -n 10 python stitchvd2_may2014_apertures_sep.py J1347 2.00 source
+
+
+

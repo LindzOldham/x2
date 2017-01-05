@@ -1,0 +1,79 @@
+from tools import solarmag
+import numpy as np, pylab as pl, pyfits as py
+import cPickle
+from makemodel import *
+from astLib import astCalc
+from imageSim import SBObjects
+from itertools import product
+
+def run(Mstar=10.5,n=4.):
+    # shen 2003's size-mass relation
+    logr = np.log10(2.88e-6) + 0.56*Mstar
+    re_norm = 10**logr
+    re_nugg = 10**(Mstar-10.7)
+    print '%.2f'%Mstar, '%.2f'%n, '%.2f'%re_norm, '%.2f'%re_nugg
+
+    # construct nugget and normal galaxy - both have the same stellar mass and sit in identical haloes
+    gal_norm = SBObjects.Sersic('normal',{'x':0,'y':0,'re':re_norm,'n':n,'q':1,'pa':0,'amp':1.})
+    gal_nugg = SBObjects.Sersic('nugget',{'x':0,'y':0,'re':re_nugg,'n':n,'q':1,'pa':0,'amp':1.})
+
+    # get halo mass at z=0.5
+    Mhalo = buildhalo(10**Mstar)
+    rhalo = virialRadius(Mhalo,0.5)    
+
+    # mass components - normal galaxy
+    r = np.logspace(-5,5,1501)
+    sb_norm = gal_norm.eval(r)
+    lr,light_norm = deproject(r,sb_norm)
+    Mdm = NFW(lr,rhalo,Mhalo)
+    Mlum_norm = light2mass(lr,light_norm,1.)
+    fac = Mlum_norm[-1]/10**Mstar
+    Mlum_norm /= fac
+
+    # mass component - nugget
+    sb_nugg = gal_nugg.eval(r)
+    lr,light_nugg = deproject(r,sb_nugg)
+    Mlum_nugg = light2mass(lr,light_nugg,1.)
+    fac = Mlum_nugg[-1]/10**Mstar
+    Mlum_nugg /= fac
+
+    # define apertures in kiloparsec, so that both galaxies are being sampled in the same apertures
+    aps = np.logspace(-1,1,50)
+    sigma_dm_norm = veldisp(r,sb_norm,Mdm,ap=aps)
+    sigma_dm_nugg = veldisp(r,sb_nugg,Mdm,ap=aps)
+    sigma_star_norm = veldisp(r,sb_norm,Mlum_norm,ap=aps)      
+    sigma_star_nugg = veldisp(r,sb_nugg,Mlum_nugg,ap=aps)  
+    vd_norm = (sigma_dm_norm + sigma_star_norm)**0.5
+    vd_nugg = (sigma_dm_nugg + sigma_star_nugg)**0.5
+
+    pl.figure()
+    pl.xlabel('aperture radius / kpc')
+    pl.ylabel('$\sigma$ / kms$^{-1}$')
+    pl.title('Mstar = '+'%.2f'%Mstar+', n = '+'%.2f'%n)
+    pl.plot(aps, vd_norm,label='normal',color='SteelBlue',ls='-')
+    pl.plot(aps, sigma_star_norm**0.5,color='SteelBlue',ls='--')
+    pl.plot(aps, sigma_dm_norm**0.5,color='SteelBlue',ls='dotted')
+    pl.plot(aps,vd_nugg,label='nugget',color='Teal',ls='-')
+    pl.plot(aps, sigma_star_nugg**0.5,color='Teal',ls='--')
+    pl.plot(aps, sigma_dm_nugg**0.5,color='Teal',ls='dotted')
+    pl.xlim([0,10])
+    pl.legend(loc='lower right')
+    #pl.ylim([160,230])
+    pl.savefig('/data/ljo31/public_html/Lens/phys_models/synthetic_both/all_n/Mstar'+'%.2f'%Mstar+'n'+'%.2f'%n+'.pdf')
+    cat.append([Mstar,n,re_norm, re_nugg,Mhalo,vd_norm, vd_nugg])
+
+cat = []
+sersic_indices = np.linspace(1.,6.,20)
+Mstars = np.linspace(10.5,12,20)
+
+for i in range(Mstars.size):
+    run(Mstars[i],n=6.)
+
+f=open('/data/ljo31/public_html/Lens/phys_models/synthetic_both/n=6/cat','wb')
+cPickle.dump(cat,f,2)
+f.close()
+pl.show()
+'''for i in range(Mstars.size):
+    for j in range(sersic_indices.size):
+        run(Mstars[i],sersic_indices[j])'''
+

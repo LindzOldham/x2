@@ -1,0 +1,9 @@
+import numpy as np
+
+m1 = np.load('/data/ljo31/Lens/LensParams/F606W_rightredshifts_data')
+m2 = np.load('/data/ljo31/Lens/LensParams/F606W_rightredshifts_model')
+m3 = np.load('/data/ljo31/Lens/LensParams/F606W_redshift0_model')
+m4 = np.load('/data/ljo31/Lens/LensParams/V_redshift0_model')
+
+for ii in range(m1.size):
+    print '%.2f'%m1[ii], '&', '%.2f'%m2[ii], '&', '%.2f'%m3[ii], '&', '%.2f'%m4[ii], r'\\'
