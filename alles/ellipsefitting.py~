@@ -1,0 +1,56 @@
+import numpy as np, pylab as pl, pyfits as py, cPickle
+from tools.fitEllipse import *
+from scipy import ndimage
+
+name = py.open('/data/ljo31/Lens/LensParams/Phot_1src.fits')[1].data['name']
+masses = np.load('/data/ljo31/Lens/Analysis/ReMassTrace_35.npy')
+res = np.load('/data/ljo31/Lens/Analysis/ReTrace_35.npy')
+res=np.log10(res)
+smooth=1.
+color='CornflowerBlue'
+
+## practise on data with enough points in it!
+def ellipse(ax,ay,xbins,ybins,plotdata=False):
+    if plotdata:
+        pl.figure()
+        pl.scatter(res[0],masses[0])
+    # compute contours, which we can then fit ellipses to
+    H,xbins,ybins = pl.histogram2d(ax,ay,bins=[xbins,ybins])
+    #pl.imshow(H,interpolation='nearest',origin='lower')
+    H = ndimage.gaussian_filter(H,smooth)
+    sortH = np.sort(H.flatten())
+    cumH = sortH.cumsum()
+    # 1, 2, 3-sigma, for the old school:
+    lvl00 = 2*sortH.max()
+    lvl68 = sortH[cumH>cumH.max()*0.32].min()
+    lvl95 = sortH[cumH>cumH.max()*0.05].min()
+    lvl99 = sortH[cumH>cumH.max()*0.003].min()
+    #pl.figure()
+    #pl.contourf(H.T,[lvl95,lvl68],colors=color,alpha=0.4,\
+                   #extent=(xbins[0],xbins[-1],ybins[0],ybins[-1]))
+    #pl.contourf(H.T,[lvl68,lvl00],colors=color,alpha=0.7,\
+                   #extent=(xbins[0],xbins[-1],ybins[0],ybins[-1]))
+    # Always plot outlines:  
+    #pl.contour(H.T,[lvl68,lvl95],colors=color,\
+                 # extent=(xbins[0],xbins[-1],ybins[0],ybins[-1]))
+    # extract contours
+    cn = pl.contour(H.T,[lvl68,lvl95],colors=color,\
+                  extent=(xbins[0],xbins[-1],ybins[0],ybins[-1]))
+    p = cn.collections[0].get_paths()[0]
+    v=p.vertices
+    x,y=v.T
+    a = fitEllipse(x,y)
+    sxy,sx2,sy2 = a[1]/2.,a[0],a[2]
+    sx,sy=abs(sx2)**0.5,abs(sy2)**0.5
+    rho = sxy/sx/sy
+    return rho
+
+
+
+result = np.load('/data/ljo31/Lens/LensModels/J1347_112')
+lp,trace,dic,_ = result
+trace=trace[:,0].reshape((1000*52,26))
+xbins=np.linspace(-0.4,-0.2,10)
+ybins=np.linspace(82,88,10)
+a=ellipse(trace[:,0],trace[:,3],xbins,ybins)
+#ellipse(masses[0],res[0])

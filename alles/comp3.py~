@@ -1,0 +1,42 @@
+import pylab as pl, numpy as np, pyfits as py
+
+tab1 = py.open('/data/ljo31/Lens/LensParams/Phot_1src_lensgals_new.fits')[1].data
+names1,rev1,rei1,magv1,magi1 = tab1['name'],tab1['re v'], tab1['re i'],tab1['mag v'], tab1['mag i']
+tab2 = py.open('/data/ljo31/Lens/LensParams/Phot_1src_lensgals_huge_quick.fits')[1].data
+names2,rev2,rei2,magv2,magi2 = tab2['name'],tab2['re v'], tab2['re i'],tab2['mag v'],tab2['mag i']
+
+rev3,rei3 = rev2*0.,rei2*0.
+magv3,magi3 = rev2*0.,rev2*0.
+for name in names2:
+    ii = np.where(names1==name)
+    rev3[np.where(names2==name)] = rev1[ii]
+    rei3[np.where(names2==name)] = rei1[ii]
+    magv3[np.where(names2==name)] = magv1[ii]
+    magi3[np.where(names2==name)] = magi1[ii]
+
+
+def scat(x,y):
+    pl.scatter(x,y,s=30,color='SteelBlue')
+    #pl.axhline(0,color='SteelBlue')
+
+
+pl.figure()
+scat(rev2,rev3)
+pl.xlabel('$r_{e,v}$ (new)')
+pl.ylabel('$r_{e,v}$ (old)')
+
+pl.figure()
+scat(rei2,rei3)
+pl.xlabel('$r_{e,i}$ (new)')
+pl.ylabel('$r_{e,i}$ (old)')
+
+pl.figure()
+scat(magv2,magv3)
+pl.xlabel('$V$ (new)')
+pl.ylabel('$V$ (old)')
+
+
+pl.figure()
+scat(magi2,magi3)
+pl.xlabel('$I$ (new)')
+pl.ylabel('$I$ (old)')

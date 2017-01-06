@@ -1,0 +1,16 @@
+import numpy as np, pylab as pl, pyfits as py, cPickle
+from astLib import astCalc
+
+table = py.open('/data/ljo31/Lens/LensParams/Phot_1src_huge_new.fits')[1].data
+names = table['name']
+re,dre = table['re v'], np.min((table['re v lo'],table['re v hi']),axis=0)
+sz = np.load('/data/ljo31/Lens/LensParams/SourceRedshiftsUpdated.npy')[()]
+
+
+for n in range(names.size):
+    name = names[n]
+    lo,med,hi=np.load('/data/ljo31b/EELs/inference/new/212_params_'+name+'.npy').T
+    z = sz[name]
+    age = med[3] + astCalc.tl(z)
+    print name, '%.2f'%age
+

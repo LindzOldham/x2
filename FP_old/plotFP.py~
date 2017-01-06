@@ -1,0 +1,28 @@
+import numpy as np, pylab as pl, pyfits as py
+
+names = ['J0837','J0901','J0913','J1125','J1144','J1218']
+keys = ['lens velocity','lens dispersion','source velocity','source dispersion']
+MM =np.zeros((len(names), len(keys)))
+LL,UU = MM*0.,MM*0.
+
+n=0
+for name in names:
+    result = np.load('/data/ljo31b/EELs/esi/kinematics/inference/'+name)
+    lp,trace,dic,_ = result
+    trace = trace[150:]
+    L,M,U = [],[],[]
+    for key in keys:
+        print key
+        dic[key] = dic[key][150:]
+        f = dic[key].reshape((trace.shape[0]*trace.shape[1]))
+        lo,med,up = np.percentile(f,50)-np.percentile(f,16), np.percentile(f,50), np.percentile(f,84)-np.percentile(f,50) 
+        L.append(lo)
+        M.append(med)
+        U.append(up)
+    LL[n] = L
+    MM[n] = M
+    UU[n] = U
+    n+=1
+
+vl,sl,vs,ss = MM.T
+np.save('/data/ljo31b/EELs/esi/kinematics/inference/night1',[LL,MM,UU])

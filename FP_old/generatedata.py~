@@ -1,0 +1,36 @@
+import numpy as np, pylab as pl, pyfits as py
+import cPickle
+import itertools
+
+def generator(Nit):
+    nc = 0 
+    result = []
+    while nc<Nit:
+        x = np.random.uniform(1.5,2.5)               
+        y = np.random.uniform(15,25)
+        Q = np.random.uniform(0,1)
+        if Q < func_gaussian(x,y) / (M*comp(x,y)):
+            result.append([x,z])
+            print nc
+            nc+=1
+    return result
+
+
+alpha,beta,gamma = 1.25,0.3,-7.
+
+def func(logsigma,mu): 
+    return alpha*logsigma + beta*mu + gamma
+
+def comp(logsigma,mu):
+    return scipy.stats.uniform(1.5,1.).pdf(logsigma) * scipy.stats.uniform(15.,10.).pdf(mu)
+
+
+xx = np.linspace(1.5,2.5,50)
+yy = np.linspace(15,25,50)
+
+ii = np.array(list(itertools.product(xx,zz)))
+f = func(ii[:,0],ii[:,1])
+g = comp(ii[:,0],ii[:,1])
+j = np.max(f)/np.max(g)
+print j
+

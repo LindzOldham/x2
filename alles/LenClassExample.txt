@@ -1,0 +1,49 @@
+from linslens import EELsModels as L
+img1 = py.open('/data/ljo31/Lens/J1323/SDSSJ1323+3946_F555W_sci_cutout_big.fits')[0].data.copy()
+sig1 = py.open('/data/ljo31/Lens/J1323/SDSSJ1323+3946_F555W_noisemap_big.fits')[0].data.copy()
+psf1 = py.open('/data/ljo31/Lens/J1323/SDSSJ1323+3946_F555W_psf2.fits')[0].data.copy()
+psf1 = psf1[10:-10,11:-10] # possibly this is too small? See how it goes
+psf1 = psf1/np.sum(psf1)
+img2 = py.open('/data/ljo31/Lens/J1323/SDSSJ1323+3946_F814W_sci_cutout_big.fits')[0].data.copy()
+sig2 = py.open('/data/ljo31/Lens/J1323/SDSSJ1323+3946_F814W_noisemap_big.fits')[0].data.copy()
+psf2 = py.open('/data/ljo31/Lens/J1323/SDSSJ1323+3946_F814W_psf3.fits')[0].data.copy()
+result = np.load('/data/ljo31/Lens/J1323/emcee_1src0')
+
+
+reload(L)
+model = L.EELs(result,name='J1323')
+model.MakeDict()
+model.BuildLenses()
+model.BuildGalaxies()
+model.BuildSources()
+model.AddImages(img1,sig1,psf1,img2,sig2,psf2,Dx=-20.,Dy=-20.)
+model.GetFits()
+model.GetIntrinsicMags()
+model.GetSourceSize()
+model.GetPhotometry()
+model.GetSB()
+model.EasyAddImages()
+model.GeneralFit()
+model.GetFitDictionary()
+
+
+or 
+
+reload(L)
+model = L.EELs(result,name='J1323')
+model.MakeDict()
+model.BuildLenses()
+model.BuildGalaxies()
+model.BuildSources()
+model.EasyAddImages()
+model.GetFits()
+model.GetIntrinsicMags()
+model.GetSourceSize()
+model.GetPhotometry()
+model.GetSB()
+model.EasyAddImages()
+model.MakePDFDict()
+model.GetPDFs()
+model.PrintPDFTable()
+
+

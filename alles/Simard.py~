@@ -1,0 +1,19 @@
+import numpy as np, pylab as pl, pyfits as py
+
+cat = py.open('/data/ljo31b/EELs/catalogues/table1.fits')[1].data
+name, ra, dec, BT, BT_r, PpS = cat['objID'], cat['_RAJ2000'],cat['_DEJ2000'],cat['__B_T_g'], cat['__B_T_r'], cat['PpS']
+Rdisk, Rbulge, Rgal = cat['Rd'], cat['Re'], cat['Rhlg']
+Mdisk, Mbulge, Mgal = cat['gdMag'], cat['gbMag'], cat['ggMag']
+# explore the data
+#pl.figure()
+#pl.scatter(BT_g,BT_r,color='SteelBlue')
+#pl.xlabel('$B/T_g$')
+#pl.ylabel('$B/T_r$')
+
+pl.figure()
+pl.scatter(BT, PpS,color='SteelBlue')
+
+cat3 = py.open('/data/ljo31b/EELs/catalogues/table3.fits')[1].data
+name3, z,Mgal3,Rgal3, n = cat3['objID'],cat3['z'],cat3['gg2d'],cat3['Rhlg'],cat3['ng']
+
+# merge catalogues using objid

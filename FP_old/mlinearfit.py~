@@ -1,0 +1,503 @@
+def quickfit(data,dep,doscatter=False,sample_factor=25):
+    import pymc,numpy
+    from math import pi,log10
+    from stellarpop import MyStepMethods as MySM
+    from scipy import optimize
+
+    d = []
+    de = []
+
+    cond = numpy.isfinite(dep[0])&numpy.isfinite(dep[1])
+    ndim = 0
+    for a,b in data:
+        d.append(a)
+        de.append(b)
+        cond = numpy.isfinite(a)&numpy.isfinite(b)&cond
+        ndim += 1
+
+#    d = numpy.array(d)
+#    de = numpy.array(de)
+    y = dep[0][cond]
+    ye = dep[1][cond]
+    npnts = y.size
+
+    lindata = numpy.ones((ndim+1,npnts))
+    for i in range(ndim):
+        d[i] = d[i][cond]
+        de[i] = de[i][cond]
+        lindata[i] = d[i].copy()
+    npnts = y.size
+
+    print "Fitting to %d data points."%npnts
+    norm = numpy.log((2*pi)**(ndim/-2.))
+
+    start = numpy.linalg.lstsq(lindata.T,y)[0]
+
+    def firstfit(p,d,de,y,ye):
+        model = y*0.+p[-2]
+        var = ye**2+p[-1]**2
+        for i in range(ndim):
+            model += p[i]*d[i]
+            var += (de[i]*p[i])**2
+        logp = -0.5*(model-y)**2/var + norm - 0.5*numpy.log(var)
+        return -1.*logp.sum()
+
+    def derivative(p,d,de,y,ye):
+        model = y*0.+p[-2]  
+        var = ye**2+p[-1]**2
+        for i in range(ndim):
+            model += p[i]*d[i]
+            var += (de[i]*p[i])**2
+        delta = y-model
+        dsqr = delta**2
+        varsqr = var**2
+        der = p*0.
+        for i in range(ndim):
+            der[i] = (2*d[i]*delta/var-2.*p[i]*de[i]**2*dsqr/varsqr).sum()
+            der[i] += (2.*p[i]*de[i]**2/var).sum()
+        der[-2] = (dsqr/var).sum()
+        der[-1] = -1.*(dsqr/varsqr).sum()
+        der *= -0.5
+        return der
+
+    print start
+    start = numpy.append(start,0.5)
+    xopt = optimize.fmin_bfgs(firstfit,start,derivative,args=(d,de,y,ye),full_output=True,disp=0)
+    return xopt
+
+
+
+def dofit(data,dep,doscatter=False,sample_factor=25):
+    import pymc,numpy
+    from math import pi,log10
+    from stellarpop import MyStepMethods as MySM
+    from scipy import optimize
+
+    d = []
+    de = []
+
+    cond = numpy.isfinite(dep[0])&numpy.isfinite(dep[1])
+    ndim = 0
+    for a,b in data:
+        d.append(a)
+        de.append(b)
+        cond = numpy.isfinite(a)&numpy.isfinite(b)&cond
+        ndim += 1
+
+#    d = numpy.array(d)
+#    de = numpy.array(de)
+    y = dep[0][cond]
+    ye = dep[1][cond]
+    npnts = y.size
+
+    lindata = numpy.ones((ndim+1,npnts))
+    for i in range(ndim):
+        d[i] = d[i][cond]
+        de[i] = de[i][cond]
+        lindata[i] = d[i].copy()
+    npnts = y.size
+
+    print "Fitting to %d data points."%npnts
+    norm = (2*pi)**(ndim/-2.)
+
+    start = numpy.linalg.lstsq(lindata.T,y)[0]
+
+    def firstfit(p,d,de,y,ye):
+        model = y*0.+p[-1]
+        var = ye**2
+        for i in range(ndim):
+            model += p[i]*d[i]
+            var += (de[i]*p[i])**2
+        return (model-y)/var**0.5
+
+    output = optimize.leastsq(firstfit,start,(d,de,y,ye),full_output=True)
+    start = output[0]
+    cov = numpy.zeros((ndim+2,ndim+2))
+    cov[:-1,:-1] = output[1]
+    cov[-1,-1] = 0.01
+    cov = output[1]
+
+    myinf = 1e15
+    myeps = 1e-15
+    slope = []
+    wsqr = []
+    mu0 = []
+    usqr = []
+    mu1 = []
+    tau1 = []
+
+
+    datacov = numpy.cov(numpy.asarray(d))
+    guess = numpy.empty((1000,ndim,ndim))
+    for i in range(1000):
+        guess[i] = pymc.rwishart(ndim,datacov/ndim)
+    musd = []
+    wsqrsd = []
+    gstd = guess.std(0)
+    guess = guess.mean(0)
+    wtmp = []
+    sig0 = []
+    sig = []
+    for i in range(ndim):
+        slope.append(pymc.Uniform('slope_%d'%i,-myinf,myinf,value=start[i]))
+        mu0.append(pymc.Uniform('mu0_%d'%i,-myinf,myinf,value=d[i].mean()))
+        musd.append(d[i].std()/npnts)
+        wsqr.append([j for j in range(ndim)])
+        sig.append([j for j in range(ndim)])
+        for j in range(i,ndim):
+            wsqrsd.append(gstd[i,j])
+            if i==j:
+                wtmp.append(pymc.Uniform('wsqr_%d_%d'%(i,j),0.,myinf,value=guess[i,j]))
+                sig0.append(pymc.Uniform('sig0_%d_%d'%(i,j),0.,myinf,value=guess[i,j]))
+            else:
+                wtmp.append(pymc.Uniform('wsqr_%d_%d'%(i,j),-myinf,myinf,value=guess[i,j]))
+                sig0.append(pymc.Uniform('sig0_%d_%d'%(i,j),-myinf,myinf,value=guess[i,j]))
+#                wtmp.append(pymc.Uniform('wsqr_%d_%d'%(i,j),-myeps,myeps,value=0.))
+    wlist = [i for i in wtmp]
+    slist = [i for i in sig0]
+    for i in range(ndim):
+        for j in range(i,ndim):
+            wsqr[i][j] = wtmp[0]
+            wsqr[j][i] = wsqr[i][j]
+            del wtmp[0]
+            sig[i][j] = sig0[0]
+            sig[j][i] = sig[i][j]
+            del sig0[0]
+
+    tausd = numpy.empty((1000,ndim,ndim))
+    usqrsd = numpy.empty((1000,ndim,ndim))
+    for i in range(1000):
+        tausd[i] = pymc.rwishart(ndim,datacov/ndim)
+        usqrsd[i] = pymc.rwishart(ndim,datacov/ndim)
+#    usqr = pymc.InverseWishart('usqr',ndim,wsqr,value=usqrsd.mean(0))
+#    usqr = []
+    k0 = pymc.Uniform('k0',ndim*2,myinf,value=ndim*2)
+    nu0 = pymc.Uniform('nu0',ndim*2,myinf,value=ndim*2)
+#    tau1 = pymc.InverseWishart('tau',nu0,wsqr,value=tausd.mean(0))
+    tau1 = pymc.InverseWishart('tau',nu0/2.,nu0*sig/2.,value=tausd.mean(0))
+    usqr = pymc.InverseWishart('usqr',k0/2.,k0*wsqr/2.,value=usqrsd.mean(0))
+
+    mu1 = pymc.MvNormalCov('mu1',mu0,usqr,value=[d[i].mean() for i in range(ndim)])
+
+    """
+#    k0 = pymc.Uniform('k0',ndim,myinf,value=ndim)
+#    tau1 = pymc.InverseWishart('tau',npnts,sig,value=tausd.mean(0))
+    k = numpy.asarray(d)
+    mu1 = pymc.Uniform('mu1',k.mean(1)-myinf,k.mean(1)+myinf,value=k.mean(1))
+
+    tau1 = []
+    for i in range(ndim):
+        tau1.append([j for j in range(ndim)])
+    for i in range(ndim):
+        for j in range(i,ndim):
+            if i==j:
+                tau1[i][j] = pymc.Uniform('tau1_%d_%d'%(i,j),0,myinf,value=datacov[i,j])
+            else:
+                tau1[i][j] = pymc.Uniform('tau1_%d_%d'%(i,j),-myinf,myinf,value=0.)#datacov[i,j])
+                tau1[j][i] = tau1[i][j]
+
+    tausd = []
+    taulist = []
+    for i in range(ndim):
+        for j in range(i,ndim):
+            taulist.append(tau1[i][j])
+            tausd.append((abs(datacov[i,j])/npnts)**0.5)
+    """
+#    tausd = datacov/npnts
+
+#    tausd = tausd.std(0)
+#    usqrsd = usqrsd.std(0)
+
+    inter = pymc.Uniform('intercept',-myinf,myinf,value=start[-1])
+
+    if doscatter:
+        sigma = pymc.Uniform('sigma',0.,myinf,value=0.)
+    else:
+        sigma = 0.
+
+    xvar = (numpy.eye(ndim).repeat(npnts).reshape((ndim,ndim,npnts))*numpy.asarray(de)**2).T.reshape((npnts,ndim,ndim))
+    d = numpy.asarray(d)
+    """
+    @pymc.observed
+    def logpx(value=d,xe=xvar,xt=mu1,tau=tau1):
+        logp = 0.
+        tau = numpy.array(tau)
+        for i in range(npnts):
+            err = (xe[i]+tau)
+            var = numpy.linalg.inv(err)
+            d = value[:,i]-xt
+            logp += -0.5*numpy.dot(d,numpy.dot(var,d)) - 0.5*numpy.log(numpy.linalg.det(err)*(2*pi)**ndim)
+        return logp
+    """ 
+
+    def nd_inv(arr,det=False):
+        if arr.shape[1]==2:
+            d = arr[:,0,0]*arr[:,1,1]-arr[:,1,0]*arr[:,0,1]
+            inv = arr.copy()
+            inv[:,0,0] = arr[:,1,1]/d
+            inv[:,1,1] = arr[:,0,0]/d
+            inv[:,0,1] = -arr[:,0,1]/d
+            inv[:,1,0] = -arr[:,1,0]/d
+        elif arr.shape[1]==3:
+            d = arr[:,0,0]*(arr[:,2,2]*arr[:,1,1]-arr[:,1,2]*arr[:,2,1])-arr[:,0,1]*(arr[:,2,2]*arr[:,1,0]-arr[:,1,2]*arr[:,2,0])+arr[:,0,2]*(arr[:,2,1]*arr[:,1,0]-arr[:,1,1]*arr[:,2,0])
+            inv = arr.copy()
+            inv[:,0,0] = (arr[:,2,2]*arr[:,1,1]-arr[:,1,2]*arr[:,2,1])/d
+            inv[:,1,0] = -(arr[:,2,2]*arr[:,1,0]-arr[:,1,2]*arr[:,2,0])/d
+            inv[:,2,0] = (arr[:,2,1]*arr[:,1,0]-arr[:,1,1]*arr[:,2,0])/d
+            inv[:,0,1] = -(arr[:,2,2]*arr[:,0,1]-arr[:,0,2]*arr[:,2,1])/d
+            inv[:,1,1] = (arr[:,2,2]*arr[:,0,0]-arr[:,0,2]*arr[:,2,0])/d
+            inv[:,2,1] = -(arr[:,2,1]*arr[:,0,0]-arr[:,0,1]*arr[:,2,0])/d
+            inv[:,0,2] = (arr[:,1,2]*arr[:,0,1]-arr[:,0,2]*arr[:,1,1])/d
+            inv[:,1,2] = -(arr[:,1,2]*arr[:,0,0]-arr[:,0,2]*arr[:,1,0])/d
+            inv[:,2,2] = (arr[:,1,1]*arr[:,0,0]-arr[:,0,1]*arr[:,1,0])/d
+        else:
+            d = numpy.empty(arr.shape[0])
+            inv = arr.copy()
+            for i in range(d.size):
+                d[i] = numpy.linalg.det(arr[i])
+                inv[i] = numpy.linalg.inv(arr[i])
+        return d,inv
+
+    masking = True
+    @pymc.deterministic
+    def logpy(value=y,x=d,ye=ye,xe=xvar,tau=tau1,mu=mu1,m=slope,b=inter,s=sigma):
+        logp = 0.
+        tau = numpy.array(tau)#numpy.eye(ndim)
+#        if masking is True:
+#            tau = tau*numpy.eye(ndim)
+        beta = numpy.array(m)
+        betatau = numpy.dot(beta,tau)
+        taubeta = numpy.dot(tau.T,beta)
+        betamu = numpy.dot(beta,mu)+b
+        betataubeta = numpy.dot(betatau,beta)+s**2+ye**2
+        var = (xe+tau)
+        det,var = nd_inv(var)
+        vardiff = var.copy()
+        for i in range(ndim):
+            vardiff[:,i] = vardiff[:,i]*(x.T-mu)
+        vardiff = vardiff.sum(2)
+        logp = -0.5*(vardiff*(x.T-mu)).sum() - 0.5*numpy.log(det*(2*pi)**ndim).sum()
+        E = betamu + (vardiff*betatau).sum(1)
+        VAR = betataubeta - ((var*taubeta).sum(2)*betatau).sum(1)
+        logp += -0.5*((value-E)**2/VAR).sum() - 0.5*numpy.log(2*pi*VAR).sum()
+        if numpy.isnan(logp):
+            return -1e200
+        return logp
+
+    @pymc.observed
+    def logp(value=y,lp=logpy):
+        return lp
+
+        ### Much slower version, but works for ND
+        logp = 0. 
+        for i in range(npnts):
+            err = (xe[i]+tau)
+            var = numpy.linalg.inv(err)
+            vardiff = numpy.dot(var,x[:,i]-mu)
+            logp += -0.5*numpy.dot(x[:,i]-mu,vardiff) - 0.5*numpy.log(numpy.linalg.det(err)*(2*pi)**ndim)
+            E = betamu + numpy.dot(betatau,vardiff)
+            VAR = betataubeta[i] - numpy.dot(betatau,numpy.dot(var,taubeta))
+            logp += -0.5*(value[i]-E)**2/VAR - 0.5*numpy.log(2*pi*VAR)
+        if numpy.isnan(logp):
+            return -1e200
+        return logp
+
+
+    def covfromtrace(sampler,pars):
+        n = sampler.trace(pars[0].__name__,0)[:].size
+        vals = numpy.empty((len(pars),n))
+        for i in range(len(pars)):
+            name = pars[i].__name__
+            vals[i] = sampler.trace(name,0)[:]
+        return numpy.cov(vals)
+    def covfromtrace(sampler,pars,pare=1):
+        norig = sampler.trace(pars[0].__name__,0)[:].shape[0]
+        npnts = norig/pare
+        vals = []
+        for i in pars:
+            if i.value.size!=1:
+                j = i.value.flatten().tolist()
+                if len(j)==1:
+                    j = j[0]
+                vals = vals + j
+            else:
+                vals.append(i.value)
+        vals = numpy.empty((len(vals),npnts))
+        n = 0
+        for i in range(len(pars)):
+            name = pars[i].__name__
+            d = sampler.trace(name,0)[:]
+            if d.ndim>1:
+                m = d.size/norig
+                d = d.T.reshape((m,norig))
+                vals[n:n+m] = d[:,-npnts:].copy()
+                n += m
+            else:
+                vals[n] = sampler.trace(name,0)[:][-npnts:]
+                n += 1
+        return numpy.cov(vals)
+
+#
+#
+#
+#
+#
+#
+#
+
+    if sample_factor<25:
+        sample_factor = 25
+    niter = 2*int(y.size+(ndim*ndim+ndim)*1.5+2*ndim+2)*sample_factor
+    pars = [slope,inter,sigma,wlist,mu0,usqr,mu1,tau1,logpy,logp,slist,k0,nu0]
+    pars = [slope,inter,sigma,mu1,taulist,logpy,logp]
+
+    if doscatter:
+        mpars = slope+[inter,sigma]
+        cov = numpy.zeros((ndim+2,ndim+2))
+        cov[:-1,:-1] = output[1]
+        cov[-1,-1] = 1e-4
+    else:
+        mpars = slope+[inter]
+
+    model = pymc.MCMC(pars)
+    model.use_step_method(MySM.MWAdaptiveMetropolis,mpars,cov=cov,delay=niter/2,interval=niter/4+1,greedy=False,doLikelihood=True)
+#    model.use_step_method(pymc.PDMatrixMetropolis,tau1,proposal_sd=tausd)
+#    model.use_step_method(pymc.PDMatrixMetropolis,usqr,proposal_sd=usqrsd)
+#    for i in range(ndim):
+#        model.use_step_method(pymc.Metropolis,mu0[i],proposal_sd=musd[i])
+#    for i in range(len(wlist)):
+#        model.use_step_method(pymc.Metropolis,wlist[i],proposal_sd=wsqrsd[i])
+#    for i in range(ndim):
+#        for j in range(i,ndim):
+#            model.use_step_method(pymc.Metropolis,tau1[i][j],proposal_sd=tausd[i][j])
+    for i in range(len(taulist)):
+        model.use_step_method(pymc.Metropolis,taulist[i],proposal_sd=tausd[i])
+    model.sample(niter,niter/2,tune_throughout=False,tune_interval=niter/10)
+
+    cov = covfromtrace(model,mpars)*4.
+#    t = model.trace('tau',0)[:]
+#    tausd = t.std(0)
+    """
+    u = model.trace('usqr',0)[:]
+    usqrsd = u.std(0)
+    for i in range(ndim):
+        musd[i] = model.trace('mu0_%d'%i,0)[:].std()
+    for i in range(len(wlist)):
+        wsqrsd[i] = model.trace(wlist[i].__name__,0)[:].std()
+    """
+    mu1cov = numpy.cov(model.trace('mu1',0)[:].T)
+
+
+#    """
+
+    model = pymc.MCMC(pars)
+    model.use_step_method(MySM.MWAdaptiveMetropolis,mpars,cov=cov,delay=niter/2,interval=niter/4+1,greedy=False,doLikelihood=True)
+#    model.use_step_method(pymc.PDMatrixMetropolis,tau1,proposal_sd=tausd)
+#    model.use_step_method(pymc.PDMatrixMetropolis,usqr,proposal_sd=usqrsd)
+#    for i in range(ndim):
+#        model.use_step_method(pymc.Metropolis,mu0[i],proposal_sd=musd[i])
+#    for i in range(len(wlist)):
+#        model.use_step_method(pymc.Metropolis,wlist[i],proposal_sd=wsqrsd[i])
+    model.use_step_method(MySM.MVNMetropolis,mu1,cov=mu1cov)
+#    for i in range(ndim):
+#        for j in range(i,ndim):
+#            model.use_step_method(pymc.Metropolis,tau1[i][j],proposal_sd=tausd[i][j])
+    for i in range(len(taulist)):
+        model.use_step_method(pymc.Metropolis,taulist[i],proposal_sd=tausd[i])
+    model.sample(niter,niter/2,tune_throughout=False,tune_interval=niter/10)
+
+
+    cov = covfromtrace(model,mpars)
+
+#    t = model.trace('tau',0)[:]
+#    tausd = t.std(0)
+    """
+    u = model.trace('usqr',0)[:]
+    usqrsd = u.std(0)
+    for i in range(ndim):
+        musd[i] = model.trace('mu0_%d'%i,0)[:].std()
+    for i in range(len(wlist)):
+        wsqrsd[i] = model.trace(wlist[i].__name__,0)[:].std()
+    """
+    mu1cov = numpy.cov(model.trace('mu1',0)[:].T)
+#    """
+
+
+    model = pymc.MCMC(pars)
+    model.use_step_method(MySM.MWAdaptiveMetropolis,mpars,cov=cov,delay=niter/2,interval=niter/4+1,greedy=False,doLikelihood=True)
+#    model.use_step_method(pymc.PDMatrixMetropolis,tau1,proposal_sd=tausd)
+#    model.use_step_method(pymc.PDMatrixMetropolis,usqr,proposal_sd=usqrsd)
+#    for i in range(ndim):
+#        model.use_step_method(pymc.Metropolis,mu0[i],proposal_sd=musd[i])
+#    for i in range(len(wlist)):
+#        model.use_step_method(pymc.Metropolis,wlist[i],proposal_sd=wsqrsd[i])
+    model.use_step_method(MySM.MVNMetropolis,mu1,cov=mu1cov)
+#    for i in range(ndim):
+#        for j in range(i,ndim):
+#            model.use_step_method(pymc.Metropolis,tau1[i][j],proposal_sd=tausd[i][j])
+    for i in range(len(taulist)):
+        model.use_step_method(pymc.Metropolis,taulist[i],proposal_sd=tausd[i])
+    model.sample(niter,niter/2,tune_throughout=False,tune_interval=niter/10)
+
+    cov = covfromtrace(model,mpars)
+
+#    t = model.trace('tau',0)[:]
+#    tausd = t.std(0)
+    """
+    u = model.trace('usqr',0)[:]
+    usqrsd = u.std(0)
+    for i in range(ndim):
+        musd[i] = model.trace('mu0_%d'%i,0)[:].std()
+    for i in range(len(wlist)):
+        wsqrsd[i] = model.trace(wlist[i].__name__,0)[:].std()
+    """
+    mu1cov = numpy.cov(model.trace('mu1',0)[:].T)
+#    """
+
+    model = pymc.MCMC(pars)
+    model.use_step_method(MySM.MWAdaptiveMetropolis,mpars,cov=cov,delay=niter*8,interval=niter*8,doLikelihood=True,Markovian=True)
+#    model.use_step_method(pymc.PDMatrixMetropolis,tau1,proposal_sd=tausd)
+#    model.use_step_method(pymc.PDMatrixMetropolis,usqr,proposal_sd=usqrsd)
+#    for i in range(ndim):
+#        model.use_step_method(pymc.Metropolis,mu0[i],proposal_sd=musd[i])
+#    for i in range(len(wlist)):
+#        model.use_step_method(pymc.Metropolis,wlist[i],proposal_sd=wsqrsd[i])
+    model.use_step_method(MySM.MVNMetropolis,mu1,cov=mu1cov)
+#    for i in range(ndim):
+#        for j in range(i,ndim):
+#            model.use_step_method(pymc.Metropolis,tau1[i][j],proposal_sd=tausd[i][j])
+    for i in range(len(taulist)):
+        model.use_step_method(pymc.Metropolis,taulist[i],proposal_sd=tausd[i])
+    model.sample(niter*2,niter,tune_throughout=False,tune_interval=niter/10)
+
+
+#    import pylab
+#    pylab.plot(model.trace('tau',0)[:][:,0,0])
+#    pylab.figure()
+#    pylab.plot(model.trace('slope_2')[:])
+#    pylab.show()
+#    import pylab
+#    pylab.plot(model.trace('logpy',0)[:])
+#    pylab.show()
+    m = []
+    for i in range(ndim):
+        m.append(model.trace('slope_%d'%i,0)[:])
+    b = model.trace('intercept',0)[:]
+
+    if doscatter:
+        s = model.trace('sigma')[:]
+        return m,b,s
+
+    s = m[0]*0.
+    for i in range(s.size):
+        yt = y*0. 
+        etot = ye**2
+        for j in range(ndim):
+            yt += m[j][i]*d[j]
+            etot += (m[j][i]*de[j])**2
+        yt += b[i]
+        etot = etot**0.5
+        s[i] = ((y-yt)/etot).std()
+
+    return m,b,s
+

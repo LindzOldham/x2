@@ -1,0 +1,75 @@
+import numpy as np, pylab as pl, pyfits as py
+from linslens import EELsModels as L
+from tools.simple import printn, climshow
+from scipy.interpolate import splrep, splev,splint
+import indexTricks as iT
+
+result = np.load('/data/ljo31/Lens/J0913/twoband_212')#/LensModels/new/J0913_212')#
+name='J0913'
+from linslens import EELsModels as L
+model = L.EELs(result,name)
+model.Initialise()
+print model.GetIntrinsicMags()
+model.GetSourceSize(kpc=True)
+z=model.z
+Da=model.Da
+scale=model.scale
+srcs=model.srcs
+imgs=model.imgs
+fits=model.fits
+Xgrid=np.logspace(-4,5,1501)
+R = Xgrid.copy()
+
+s1 = fits[0][-3]*srcs[0].eval(Xgrid)
+s2 = fits[0][-2]*srcs[1].eval(Xgrid)
+
+ZPs = model.ZPs
+mag1 = srcs[0].getMag(fits[0][-3],ZPs[0])
+mag2 = srcs[1].getMag(fits[0][-2],ZPs[0])
+
+mod1 = splrep(Xgrid,s1*2.*np.pi*Xgrid)
+mod2 = splrep(Xgrid,s2*2.*np.pi*Xgrid)
+printn(-2.5*np.log10(splint(0,100000,mod2)))
+printn(-2.5*np.log10(splint(0,100000,mod1)))
+
+intlight1 = np.zeros(len(R))
+intlight2 = np.zeros(len(R))
+for i in range(len(R)):
+    intlight1[i] = splint(0,R[i],mod1)
+    intlight2[i] = splint(0,R[i],mod2)
+
+model1 = splrep(intlight1[:-300],R[:-300])
+model2 = splrep(intlight2[:-300],R[:-300])
+
+printn(splev(intlight1[-1]*0.5,model1)*scale*0.05)
+printn(splev(intlight2[-1]*0.5,model2)*scale*0.05)
+
+mod3 = splrep(Xgrid,(s2+s1)*2.*np.pi*Xgrid)
+printn(-2.5*np.log10(splint(0,100000,mod3)))
+
+intlight = np.zeros(len(R))
+for i in range(len(R)):
+    intlight[i] = splint(0,R[i],mod3)
+
+model3 = splrep(intlight[:-300],R[:-300])
+
+printn(splev(intlight[-1]*0.5,model3))
+printn(splev(intlight[-1]*0.5,model3)*scale*0.05)
+
+
+models = model.models
+comps = model.components
+imgs = model.imgs
+yo,xo = iT.overSample(imgs[0].shape,1)
+S1 = srcs[0].pixeval(xo,yo,1.,csub=31)
+S2 = srcs[1].pixeval(xo,yo,1.,csub=31)
+
+for I in [S1,S2,S1+S2]:
+    pl.figure()
+    climshow(I,vmin=0,vmax=10)
+    pl.colorbar()
+
+printn(srcs[0].pars['q'])
+printn(srcs[1].pars['q'])
+printn(srcs[0].pars['pa'])
+printn(srcs[1].pars['pa'])

@@ -1,0 +1,18 @@
+import pyfits as py, pylab as pl, numpy as np
+from linslens import EELsLensModels as L
+
+result = np.load('/data/ljo31/Lens/LensModels/J1125_212_nonconcentric')
+model = L.EELs(result,name='J1125')
+model.Initialise()
+gals = model.gals
+fits = model.fits
+Xgrid = np.logspace(-4,5,1501)
+galaxy = fits[i][0]*gals[0].eval(Xgrid) + fits[i][1]*gals[1].eval(Xgrid)
+R = Xgrid.copy()
+light = galaxy*2.*np.pi*R
+mod = splrep(R,light,t=np.logspace(-3.8,4.8,1301))
+intlight = np.zeros(len(R))
+for i in range(len(R)):
+    intlight[i] = splint(0,R[i],mod)
+m = splrep(intlight[:-600],R[:-600])
+print m

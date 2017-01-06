@@ -1,0 +1,18 @@
+import sqlutil, numpy as np, pylab as pl, pyfits as py
+
+sz = np.load('/data/ljo31/Lens/LensParams/SourceRedshifts.npy')[()]
+
+for name in sz.keys():
+    print name
+    tab = sqlutil.get('select ra,dec,z,zErr,dered_g,dered_i,dered_r,dered_z from sdssdr12.specphotoall where (z-'+str(sz[name])+')*(z-'+str(sz[name])+')<0.004*0.004 limit 500',db='wsdb',host='cappc127',user='lindsay_oldham',password='Crontoil1!')
+    arr = np.zeros((len(tab),500))
+    for i in range(len(tab)):
+        arr[i] = tab[i]
+    ra,dec,redshift,zErr,g,i,r,z = arr
+    idx = np.where((np.isnan(g)==False) & (np.isnan(i)==False) & (np.isnan(r)==False) & (np.isnan(z)==False))
+    gr,ri,iz = (g-r)[idx],(r-i)[idx],(i-z)[idx]
+    pl.figure()
+    pl.hist(gr,np.linspace(-0.5,3.5,0.1),label='g-r')
+    pl.hist(ri,np.linspace(-0.5,3.5,0.1),label='r-i')
+    pl.hist(iz,np.linspace(-0.5,3.5,0.1),label='i-z')
+

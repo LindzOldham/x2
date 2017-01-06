@@ -1,0 +1,135 @@
+import pyfits as py, numpy as np
+from pylens import *
+from imageSim import SBModels,convolve
+import SBObjects_edit as SBObjects
+import indexTricks as iT
+from scipy import optimize
+import glob
+
+
+# load in images
+dir = '/data/ljo31b/B0712/data/B0712+472_STAR/resamp_'
+files = glob.glob(dir+'*.fits')
+files.sort()
+
+# EDIT: to demonstrate, just do this for the FIRST file
+file = files[0]
+
+img = py.open(file)[0].data[230:370,310:450]/100
+psf = py.open(file)[0].data[488-54.5:488+54.5,92-54.5:92+54.5] 
+sig = np.ones(img.shape)
+
+ypsf,xpsf = iT.coords(psf.shape)-54
+
+psf /= psf.sum()
+PSF = SBObjects._PointSourceP('PSF',psf,{'x':0,'y':0})
+psf = PSF.pixeval(xpsf,ypsf,order=1)
+PSF = convolve.convolve(img,psf)[1]
+
+yc,xc = iT.overSample(img.shape,1)
+
+# read in result from emcee run
+dir2 = '/data/ljo31/Lens/B0712/emceeruns/'
+inFile = dir2+'new_NEW_5'
+result = np.load(inFile)
+lp,trace,dic,_=result
+a2=0
+a1,a3 = np.unravel_index(lp[:,0].argmax(),lp[:,0].shape)
+
+# contruct SB objects - this model has two foreground galaxy components and one source component
+lenses = []
+p = {}
+for key in 'x','y','q','pa','b':
+    p[key] = dic['Lens 1 '+key][a1,a2,a3]
+key = 'eta'
+p[key] = dic['Lens 1 '+key][a1,a2,a3]
+lenses.append(MassModels.PowerLaw('Lens 1',p))
+
+SH = dic['extShear'][a1,a2,a3]
+SHPA = dic['extShear PA'][a1,a2,a3]
+shear = MassModels.ExtShear('shear',{'x':lenses[0].x,'y':lenses[0].y,'b':SH,'pa':SHPA})
+lenses += [shear]
+
+srcs = []
+name = 'Source 1'
+p = {}
+for key in 'q','re','n','pa','x','y':
+    p[key] = dic[name+' '+key][a1,a2,a3]
+srcs.append(SBModels.Sersic(name,p))
+
+gals = []
+name = 'Galaxy 1'
+p = {}
+for key in 'x','y','q','pa','re','n':
+    p[key] = dic[name+' '+key][a1,a2,a3]
+gals.append(SBModels.Sersic(name,p))
+
+name = 'Galaxy 2'
+p = {}
+for key in 'x','y','q','pa','re','n':
+    p[key] = dic[name+' '+key][a1,a2,a3]
+gals.append(SBModels.Sersic(name,p))
+
+# read in quasar model
+X1,X2,X3,X4 = dic['X1'][a1,a2,a3],dic['X2'][a1,a2,a3],dic['X3'][a1,a2,a3],dic['X4'][a1,a2,a3]
+Y1,Y2,Y3,Y4 = dic['Y1'][a1,a2,a3],dic['Y2'][a1,a2,a3],dic['Y3'][a1,a2,a3],dic['Y4'][a1,a2,a3]
+
+
+Q1 = SBObjects._PointSourceP('quasar 1',psf,{'x':X1,'y':Y1})
+Q2 = SBObjects._PointSourceP('quasar 2',psf,{'x':X2,'y':Y2})
+Q3 = SBObjects._PointSourceP('quasar 3',psf,{'x':X3,'y':Y3})
+Q4 = SBObjects._PointSourceP('quasar 4',psf,{'x':X4,'y':Y4})
+quasars = [Q1,Q2,Q3,Q4]
+
+
+sigin = sig.flatten()
+Psf = PSF.copy()
+xp,yp = xc.copy(),yc.copy()
+xin,yin,imin = xp.flatten(),yp.flatten(),img.flatten()
+n = 0
+model = np.empty(((len(gals) + len(srcs)+len(quasars)+1),imin.size))
+for gal in gals:
+    gal.setPars()
+    tmp = xc*0.
+    tmp = gal.pixeval(xin,yin,1.,csub=23).reshape(xc.shape)
+    tmp = convolve.convolve(tmp,Psf,False)[0]
+    model[n] = tmp.ravel()
+    n +=1
+for lens in lenses:
+    lens.setPars()
+x0,y0 = pylens.getDeflections(lenses,[xin,yin])
+for src in srcs:
+    src.setPars()
+    tmp = xc*0.
+    tmp = src.pixeval(x0,y0,1.,csub=23).reshape(xc.shape)
+    tmp = convolve.convolve(tmp,Psf,False)[0]
+    model[n] = tmp.ravel()
+    n +=1
+for quasar in quasars:
+    tmp = xc*0.
+    quasar.setPars()
+    tmp = quasar.pixeval(xin,yin,order=1).reshape(xc.shape)
+    model[n] = tmp.ravel()
+    n +=1
+model[n] = -1*np.ones(model[n-1].size)
+n+=1
+rhs = (imin/sigin) 
+op = (model/sigin).T
+fit, chi = optimize.nnls(op,rhs)
+components = (model.T*fit).T.reshape((n,img.shape[0],img.shape[1]))
+model = components.sum(0)
+
+
+# save this
+outname = 'B0712_example.fits'
+hdu  = py.HDUList()
+phdu = py.PrimaryHDU()
+hdr = phdu.header
+hdu.append(phdu)
+hdr['object'] = 'B0712'
+c =  py.ImageHDU(components)
+hdu.append(c)
+
+
+hdu.writeto(outname,clobber=True)
+    

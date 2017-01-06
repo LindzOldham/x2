@@ -1,0 +1,17 @@
+import pylab as pl, numpy as np, pyfits
+
+img1 = pyfits.open('/data/ljo31/Lens/J1605/F555W_galsub.fits')[0].data.copy()
+img2 = pyfits.open('/data/ljo31/Lens/J1605/F814W_galsub2.fits')[0].data.copy()
+
+mask1 = pyfits.open('/data/ljo31/Lens/J1605/mask.fits')[0].data.copy()
+mask2 = pyfits.open('/data/ljo31/Lens/J1605/maskF814W.fits')[0].data.copy()
+mask1 = mask1==1
+mask2 = mask2==1
+
+f555 = np.sum(img1[mask1])
+f814 = np.sum(img2[mask2])
+
+pl.figure()
+pl.imshow(img1,interpolation='nearest')
+pl.figure()
+pl.imshow(img2,interpolation='nearest')

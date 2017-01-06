@@ -1,0 +1,18 @@
+import cPickle,numpy,pyfits as py
+import pymc
+from pylens import *
+from imageSim import SBModels,convolve,SBObjects
+import indexTricks as iT
+from SampleOpt import AMAOpt
+import pylab as pl, numpy as np
+import myEmcee_blobs as myEmcee
+from scipy import optimize
+from scipy.interpolate import RectBivariateSpline
+
+## first thing: select brightest pixels in image plane and find a lens model that minimises their variance in the source plane.
+
+dir = '/data/ljo31/Lens/B0712/'
+
+image = py.open(dir+'B0712_nirc2_n_Kp_6x6.fits')[0].data
+pl.imshow(image,interpolation='nearest',origin='lower')
+pl.show()

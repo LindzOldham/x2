@@ -1,0 +1,29 @@
+import numpy as np
+import pylab as pl
+import pyfits as py
+from stellarpop import tools, distances
+import itertools
+from scipy.interpolate import splrep, splev, splint
+
+dist = distances.Distance()
+chabrier = np.load('/home/mauger/python/stellarpop/chabrier.dat')
+ages = chabrier['age']
+wave=chabrier['wave']
+solarSpectra = chabrier[6]
+
+Ifilt,Vfilt,Kfilt = tools.filterfromfile('F814W_ACS'), tools.filterfromfile('F606W_ACS'), tools.filterfromfile('Kp_NIRC2')
+gfilt, rfilt, ifilt = tools.filterfromfile('g_SDSS'), tools.filterfromfile('r_SDSS'), tools.filterfromfile('i_SDSS')
+
+idx = 180 # 10 gyr
+
+vkidata = numpy.load('/data/ljo31/Lens/LensParams/VIK_phot_212_dict_huge_new.npy')[()] # make this
+sz = np.load('/data/ljo31/Lens/LensParams/SourceRedshifts.npy')[()]
+names = vkidata.keys()
+names.sort()
+
+for name in names:
+    v_src,i_src,dv_src,di_src,vi_src,dvi_src, v_lens,i_lens,dv_lens,di_lens,vi_lens,dvi_lens, k_src, dk_src, k_lens, dk_lens = vkidata[name]
+    z = sz[name]
+    I,V,K = tools.ABFM(Ifilt,[wave,solarSpectra[180]],z), tools.ABFM(Vfilt,[wave,solarSpectra[180]],z), tools.ABFM(Kfilt,[wave,solarSpectra[180]],z)
+    g,r,i = tools.ABFM(gfilt,[wave,solarSpectra[180]],z), tools.ABFM(rfilt,[wave,solarSpectra[180]],z), tools.ABFM(ifilt,[wave,solarSpectra[180]],z)
+    print name, i_src-I, v_rc-V,k_src-K

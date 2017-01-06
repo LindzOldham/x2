@@ -1,0 +1,7 @@
+import numpy as np, pylab as pl, pyfits as py
+
+n1,n2 = np.load('/data/ljo31/Lens/LensParams/structurecat_srcs_2src.npy').T
+ii=np.where(n1>0)
+n1,n2=n1[ii],n2[ii]
+n = np.load('/data/ljo31/Lens/LensParams/structurecat_srcs_1src.npy')
+nl1,nl2 = np.load('/data/ljo31/Lens/LensParams/structurecat_lensgals.npy').T

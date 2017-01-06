@@ -1,0 +1,263 @@
+import pyfits as py, numpy as np
+from imageSim import SBModels,convolve
+from pylens import *
+import indexTricks as iT
+from scipy import optimize
+from scipy.interpolate import splrep, splev, splint
+from astLib import astCalc
+
+bands = dict([('J0837','F606W'),('J0901','F606W'),('J0913','F555W'),('J1125','F606W'),('J1144','F606W'),('J1218','F606W'),('J1248','F555W'),('J1323','F555W'),('J1347','F606W'),('J1446','F606W'),('J1605','F555W'),('J1606','F606W'),('J1619','F606W'),('J2228','F606W')])
+
+def BandDic():
+    bands = dict([('J0837','F606W'),('J0901','F606W'),('J0913','F555W'),('J1125','F606W'),('J1144','F606W'),('J1218','F606W'),('J1248','F555W'),('J1323','F555W'),('J1347','F606W'),('J1446','F606W'),('J1605','F555W'),('J1606','F606W'),('J1619','F606W'),('J2228','F606W')])
+    np.save('/data/ljo31/Lens/BandDic',bands)
+
+
+class EELs:
+    def __init__(self,result=None,name=None,fits=None):
+        self.result = result
+        self.lp, self.trace, self.dic,_ = self.result
+        self.name = name
+        self.fits = fits
+
+    def MakeDict(self):
+        ftrace = self.trace[:,0].reshape((self.trace.shape[0]*self.trace.shape[2],self.trace.shape[3]))
+        upperlower = map(lambda v: (v[0],v[1],v[2]),zip(*np.percentile(ftrace,[16,50,84],axis=0)))
+
+        l,u,d = [], [], []
+        for key in self.dic.keys():
+            f = self.dic[key][:,0].reshape((self.trace.shape[0]*self.trace.shape[2]))
+            lo,med,up = np.percentile(f,50)-np.percentile(f,16), np.percentile(f,50), np.percentile(f,84)-np.percentile(f,50) 
+            d.append((key,med))
+            l.append((key,lo))
+            u.append((key,up))
+        
+        if 'Source 1 x' not in self.dic.keys():
+            for key in 'x', 'y':
+                f = self.dic['Source 2 '+key][:,0].reshape((self.trace.shape[0]*self.trace.shape[2]))
+                lo,med,up = np.percentile(f,50)-np.percentile(f,16), np.percentile(f,50), np.percentile(f,84)-np.percentile(f,50) 
+                d.append(('Source 1 '+key,med))
+                l.append(('Source 1 '+key,lo))
+                u.append(('Source 1 '+key,up))
+        if 'Galaxy 2 x' not in self.dic.keys():
+            for key in 'x', 'y':
+                f = self.dic['Galaxy 1 '+key][:,0].reshape((self.trace.shape[0]*self.trace.shape[2]))
+                lo,med,up = np.percentile(f,50)-np.percentile(f,16), np.percentile(f,50), np.percentile(f,84)-np.percentile(f,50) 
+                d.append(('Galaxy 2 '+key,med))
+                l.append(('Galaxy 2 '+key,lo))
+                u.append(('Galaxy 2 '+key,up))
+        if 'Source 2 re' not in self.dic.keys():
+            self.srcno = 1
+        else:
+            self.srcno = 2
+        if 'Galaxy 2 re' not in self.dic.keys() and 'Galaxy 3 re' not in self.dic.keys():
+            self.galno = 1
+        elif 'Galaxy 2 re' in self.dic.keys() and 'Galaxy 3 re' not in self.dic.keys():
+            self.galno = 2
+        else:
+            self.galno = 3
+
+        self.Ddic = dict(d)                    
+        self.Ldic = dict(l)
+        self.Udic = dict(u)
+        #return self.Ddic,self.Ldic,self.Udic
+
+    def PrintTable(self):
+        print r'\begin{table}[H]'
+        print r'\centering'
+        print r'\begin{tabular}{|c|cccccc|}\hline'
+        print r' object & x & y & re & n & pa & q \\\hline'
+        print 'source 1 & $', '%.2f'%(self.Ddic['Source 1 x']+self.Ddic['Lens 1 x']), '_{-', '%.2f'%self.Ldic['Source 1 x'],'}^{+','%.2f'%self.Udic['Source 1 x'], '}$ & $', '%.2f'%(self.Ddic['Source 1 y']+self.Ddic['Lens 1 y']),'_{-', '%.2f'%self.Ldic['Source 1 y'],'}^{+', '%.2f'%self.Udic['Source 1 y'], '}$ & $', '%.2f'%self.Ddic['Source 1 re'],'_{-', '%.2f'%self.Ldic['Source 1 re'],'}^{+', '%.2f'%self.Udic['Source 1 re'], '}$ & $', '%.2f'%self.Ddic['Source 1 n'],'_{-', '%.2f'%self.Ldic['Source 1 n'],'}^{+', '%.2f'%self.Udic['Source 1 n'], '}$ & $','%.2f'%self.Ddic['Source 1 pa'],'_{-', '%.2f'%self.Ldic['Source 1 pa'],'}^{+', '%.2f'%self.Udic['Source 1 pa'], '}$ & $','%.2f'%self.Ddic['Source 1 q'],'_{-', '%.2f'%self.Ldic['Source 1 q'],'}^{+', '%.2f'%self.Udic['Source 1 q'], '}$',r'\\'
+        ###
+        print 'galaxy 1 & $', '%.2f'%self.Ddic['Galaxy 1 x'], '_{-', '%.2f'%self.Ldic['Galaxy 1 x'],'}^{+','%.2f'%self.Udic['Galaxy 1 x'], '}$ & $', '%.2f'%self.Ddic['Galaxy 1 y'],'_{-', '%.2f'%self.Ldic['Galaxy 1 y'],'}^{+', '%.2f'%self.Udic['Galaxy 1 y'], '}$ & $', '%.2f'%self.Ddic['Galaxy 1 re'],'_{-', '%.2f'%self.Ldic['Galaxy 1 re'],'}^{+', '%.2f'%self.Udic['Galaxy 1 re'], '}$ & $', '%.2f'%self.Ddic['Galaxy 1 n'],'_{-', '%.2f'%self.Ldic['Galaxy 1 n'],'}^{+', '%.2f'%self.Udic['Galaxy 1 n'], '}$ & $','%.2f'%self.Ddic['Galaxy 1 pa'],'_{-', '%.2f'%self.Ldic['Galaxy 1 pa'],'}^{+', '%.2f'%self.Udic['Galaxy 1 pa'], '}$ & $','%.2f'%self.Ddic['Galaxy 1 q'],'_{-', '%.2f'%self.Ldic['Galaxy 1 q'],'}^{+', '%.2f'%self.Udic['Galaxy 1 q'], '}$',r'\\'
+        ###
+        print 'galaxy 2 & $', '%.2f'%self.Ddic['Galaxy 2 x'], '_{-', '%.2f'%self.Ldic['Galaxy 2 x'],'}^{+','%.2f'%self.Udic['Galaxy 2 x'], '}$ & $', '%.2f'%self.Ddic['Galaxy 2 y'],'_{-', '%.2f'%self.Ldic['Galaxy 2 y'],'}^{+', '%.2f'%self.Udic['Galaxy 2 y'], '}$ & $', '%.2f'%self.Ddic['Galaxy 2 re'],'_{-', '%.2f'%self.Ldic['Galaxy 2 re'],'}^{+', '%.2f'%self.Udic['Galaxy 2 re'], '}$ & $', '%.2f'%self.Ddic['Galaxy 2 n'],'_{-', '%.2f'%self.Ldic['Galaxy 2 n'],'}^{+', '%.2f'%self.Udic['Galaxy 2 n'], '}$ & $','%.2f'%self.Ddic['Galaxy 2 pa'],'_{-', '%.2f'%self.Ldic['Galaxy 2 pa'],'}^{+', '%.2f'%self.Udic['Galaxy 2 pa'], '}$ & $','%.2f'%self.Ddic['Galaxy 2 q'],'_{-', '%.2f'%self.Ldic['Galaxy 2 q'],'}^{+', '%.2f'%self.Udic['Galaxy 2 q'], '}$',r'\\'
+        ###
+        if 'Galaxy 3 x' in self.dic.keys():
+            print 'galaxy 3 & $', '%.2f'%self.Ddic['Galaxy 3 x'], '_{-', '%.2f'%self.Ldic['Galaxy 3 x'],'}^{+','%.2f'%self.Udic['Galaxy 3 x'], '}$ & $', '%.2f'%self.Ddic['Galaxy 3 y'],'_{-', '%.2f'%self.Ldic['Galaxy 3 y'],'}^{+', '%.2f'%self.Udic['Galaxy 3 y'], '}$ & $', '%.2f'%self.Ddic['Galaxy 3 re'],'_{-', '%.2f'%self.Ldic['Galaxy 3 re'],'}^{+', '%.2f'%self.Udic['Galaxy 3 re'], '}$ & $', '%.2f'%self.Ddic['Galaxy 3 n'],'_{-', '%.2f'%self.Ldic['Galaxy 3 n'],'}^{+', '%.2f'%self.Udic['Galaxy 3 n'], '}$ & $','%.2f'%self.Ddic['Galaxy 3 pa'],'_{-', '%.2f'%self.Ldic['Galaxy 3 pa'],'}^{+', '%.2f'%self.Udic['Galaxy 3 pa'], '}$ & $','%.2f'%self.Ddic['Galaxy 3 q'],'_{-', '%.2f'%self.Ldic['Galaxy 3 q'],'}^{+', '%.2f'%self.Udic['Galaxy 3 q'], '}$',r'\\'
+        ###
+        print 'lens 1 & $', '%.2f'%self.Ddic['Lens 1 x'], '_{-', '%.2f'%self.Ldic['Lens 1 x'],'}^{+','%.2f'%self.Udic['Lens 1 x'], '}$ & $', '%.2f'%self.Ddic['Lens 1 y'],'_{-', '%.2f'%self.Ldic['Lens 1 y'],'}^{+', '%.2f'%self.Udic['Lens 1 y'], '}$ & $', '%.2f'%self.Ddic['Lens 1 b'],'_{-', '%.2f'%self.Ldic['Lens 1 b'],'}^{+', '%.2f'%self.Udic['Lens 1 b'], '}$ & $', '%.2f'%self.Ddic['Lens 1 eta'],'_{-', '%.2f'%self.Ldic['Lens 1 eta'],'}^{+', '%.2f'%self.Udic['Lens 1 eta'], '}$ & $','%.2f'%self.Ddic['Lens 1 pa'],'_{-', '%.2f'%self.Ldic['Lens 1 pa'],'}^{+', '%.2f'%self.Udic['Lens 1 pa'], '}$ & $','%.2f'%self.Ddic['Lens 1 q'],'_{-', '%.2f'%self.Ldic['Lens 1 q'],'}^{+', '%.2f'%self.Udic['Lens 1 q'], '}$',r'\\\hline'
+        ###
+        print r'\end{tabular}'
+        print r'\caption{', 'shear = $', '%.2f'%self.Ddic['extShear'], '_{-', '%.2f'%self.Ldic['extShear'],'}^{+','%.2f'%self.Udic['extShear'], '}$ , shear pa = $',  '%.2f'%self.Ddic['extShear PA'], '_{-', '%.2f'%self.Ldic['extShear PA'],'}^{+','%.2f'%self.Udic['extShear PA'], '}$}'
+        print r'\end{table}'
+
+    def BuildSources(self):
+        self.srcs = []
+        for number in range(1,1+self.srcno):
+            name = 'Source '+str(number)
+            p = {}
+            for key in 'q','re','n','pa':
+                p[key] = self.Ddic[name+' '+key]
+            for key in 'x','y': # subtract lens potition - to be added back on later in each likelihood iteration!
+                p[key] = self.Ddic[name+' '+key]+self.Ddic['Lens 1 '+key]
+            self.srcs.append(SBModels.Sersic(name,p))
+
+    def BuildGalaxies(self):
+        self.gals = []
+        for number in range(1,1+self.galno):
+            name = 'Galaxy '+str(number)
+            p = {}
+            for key in 'x','y','q','re','n','pa':
+                p[key] = self.Ddic[name+' '+key]
+            self.gals.append(SBModels.Sersic(name,p))
+
+    def BuildLenses(self):
+        self.lenses = []
+        p = {}
+        for key in 'x','y','q','pa','b','eta':
+            p[key] = self.Ddic['Lens 1 '+key]
+        self.lenses.append(MassModels.PowerLaw('Lens 1',p))
+        p = {}
+        p['x'] = self.lenses[0].pars['x']
+        p['y'] = self.lenses[0].pars['y']
+        p['b'] = self.Ddic['extShear']
+        p['pa'] = self.Ddic['extShear PA']
+        self.lenses.append(MassModels.ExtShear('shear',p))
+
+    def GetFits(self):
+        bands = dict([('J0837','F606W'),('J0901','F606W'),('J0913','F555W'),('J1125','F606W'),('J1144','F606W'),('J1218','F606W'),('J1248','F555W'),('J1323','F555W'),('J1347','F606W'),('J1446','F606W'),('J1605','F555W'),('J1606','F606W'),('J1619','F606W'),('J2228','F606W')])
+        #  not working yet - this will need us to have all the images somewhere, and all the xc,yc offsets!
+        # get nnls values! Ideally, these should be already saved
+        print "why didn't you save these before?!?"
+        yc,xc = iT.coords(self.img1.shape)
+        OVRS=1
+        yo,xo=iT.overSample(self.img1.shape,OVRS)
+        colours = [bands[self.name], 'F814W']
+        models = []
+        fits = []
+        for i in range(len(self.imgs)):
+            if i == 0:
+                dx,dy = 0,0
+            else:
+                dx = self.Ddic['xoffset']
+                dy = self.Ddic['yoffset']
+            xp,yp = xc+dx+self.Dx,yc+dy+self.Dx
+            xop,yop = xo+dy+self.Dy,yo+dy+self.Dy
+            image = self.imgs[i]
+            sigma = self.sigs[i]
+            psf = self.PSFs[i]
+            imin,sigin,xin,yin = image.flatten(), sigma.flatten(),xp.flatten(),yp.flatten()
+            n = 0
+            model = np.empty(((len(self.gals) + len(self.srcs)+1),imin.size))
+            for gal in self.gals:
+                gal.setPars()
+                tmp = xc*0.
+                tmp = gal.pixeval(xp,yp,1./OVRS,csub=11) # evaulate on the oversampled grid. OVRS = number of new pixels per old pixel.
+                tmp = iT.resamp(tmp,OVRS,True) # convert it back to original size
+                tmp = convolve.convolve(tmp,psf,False)[0]
+                model[n] = tmp.ravel()
+                n +=1
+            for lens in self.lenses:
+                lens.setPars()
+                x0,y0 = pylens.lens_images(self.lenses,self.srcs,[xp,yp],1./OVRS,getPix=True)
+            for src in self.srcs:
+                src.setPars()
+                tmp = xc*0.
+                tmp = src.pixeval(x0,y0,1./OVRS,csub=11)
+                tmp = iT.resamp(tmp,OVRS,True)
+                tmp = convolve.convolve(tmp,psf,False)[0]
+                model[n] = tmp.ravel()
+                n +=1
+            model[n] = np.ones(model[n].shape)
+            n +=1
+            rhs = (imin/sigin) # data
+            op = (model/sigin).T # model matrix
+            fit, chi = optimize.nnls(op,rhs)
+            components = (model.T*fit).T.reshape((n,image.shape[0],image.shape[1]))
+            model = components.sum(0)
+            models.append(model)
+            #SotPleparately(image,model,sigma,colours[i])
+            #NotPlicely(image,model,sigma)
+            comps = False
+            if comps == True:
+                CotSomponents(components,colours[i])
+            fits.append(fit)
+            self.fits = fits
+
+    def AddImages(self,img1,sig1,psf1,img2,sig2,psf2,Dx=None,Dy=None):
+        self.img1=img1
+        self.sig1=sig1
+        self.psf1=psf1
+        self.img2=img2
+        self.sig2=sig2
+        self.psf2=psf2
+        self.Dx=Dx
+        self.Dy=Dy
+        self.imgs = [self.img1,self.img2]
+        self.sigs = [self.sig1,self.sig2]
+        self.psfs = [self.psf1,self.psf2]
+        self.PSFs = []
+        for i in range(len(self.imgs)):
+            psf = self.psfs[i]
+            image = self.imgs[i]
+            psf /= psf.sum()
+            psf = convolve.convolve(image,psf)[1]
+            self.PSFs.append(psf)
+
+
+
+    def GetIntrinsicMags(self):
+        ZPdic = dict([('F555W',25.711),('F606W',26.493),('F814W',25.947)])
+        self.ZPs = [ZPdic[bands[self.name]],ZPdic['F814W']]
+        if len(self.srcs)==1:
+            self.mag_v = self.srcs[0].getMag(self.fits[0][-2],self.ZPs[0])
+            self.mag_i = self.srcs[0].getMag(self.fits[1][-2],self.ZPs[1])
+        elif len(self.srcs)==2:
+            mv1,mv2 = srcs[0].getMag(self.fits[0][-3],self.ZPs[0]), srcs[1].getMag(self.fits[0][-2],self.ZPs[0])
+            mi1,mi2 = srcs[0].getMag(self.fits[1][-3],self.ZPs[1]),srcs[1].getMag(self.fits[1][-2],self.ZPs[1]) 
+            Fv = 10**(0.4*(self.ZPs[0]-mv1)) + 10**(0.4*(self.ZPs[0]-mv2))
+            Fi = 10**(0.4*(self.ZPs[0]-mi1)) + 10**(0.4*(self.ZPs[0]-mi2))
+            self.mag_v, self.mag_i = -2.5*np.log10(Fv) + self.ZPs[0], -2.5*np.log10(Fi) + self.ZPs[1]
+        else:
+            print 'how many sources do you want?!?'
+        return self.mag_v, self.mag_i
+
+
+    def GetSourceSize(self,z):
+        self.z=z
+        self.Da = astCalc.da(self.z)
+        self.scale = self.Da*np.pi/180./3600.
+        if len(self.srcs) == 1:
+            self.Re = self.Ddic['Source 1 re']*0.05
+            self.Re_lower = self.Ldic['Source 1 re']*0.05
+            self.Re_upper = self.Udic['Source 1 re']*0.05
+            self.Re_kpc = self.Re*self.scale
+            return self.Re
+        elif len(self.srcs) == 2:
+            print 'test this out...!'
+            Xgrid = np.logspace(-4,5,1501)
+            Ygrid = np.logspace(-4,5,1501)
+            Res = []
+            for i in range(len(self.imgs)):
+                source = self.fits[i][-3]*self.srcs[0].eval(Xgrid) + self.fits[i][-2]*self.srcs[1].eval(Xgrid)
+                R = Xgrid.copy()
+                light = source*2.*np.pi*R
+                mod = splrep(R,light,t=np.logspace(-3.8,4.8,1301))
+                intlight = np.zeros(len(R))
+                for i in range(len(R)):
+                    intlight[i] = splint(0,R[i],mod)
+                model = splrep(intlight[:-300],R[:-300])
+                reff = splev(0.5*intlight[-1],model)
+                Res.append(reff*0.05)
+            self.Re_v,self.Re_i = Res
+            return self.Re_v, self.Re_i
+    
+    def Arcsec2Kpc(self,z=None):
+        self.z=z
+        self.Da = astCalc.da(self.z)
+        self.scale = self.Da*np.pi/180./3600.
+        if len(self.srcs)==1:
+            self.Re_kpc = self.Re*scale
+        elif len(self.srcs)==2:
+            self.Re_v_kpc = self.Re_v*scale
+            self.Re_i_kpc = self.Re_i*scale
+
+    def GetSB(self):
+        if len(self.srcs)==1:
+            Re_v,Re_i = self.Re.copy(), self.Re.copy()
+        elif len(self.srcs)==2:
+            Re_v,Re_i = self.Re_v.copy(), self.Re_i.copy()
+        self.mu_v = self.mag_v + 2.5*np.log10(2.*np.pi*Re_v**2.)
+        self.mu_i = self.mag_i + 2.5*np.log10(2.*np.pi*Re_i**2.)
+        return self.mu_v, self.mu_i

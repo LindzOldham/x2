@@ -1,0 +1,38 @@
+#!/usr/bin/env python -W ignore
+
+# command: python MakeMask.py ['/data/ljo31/Lens/coordfile.fits' '/data/ljo31/Lens/SDSSJ1606+2235_F606W_sci_cutout.fits' '/data/ljo31/Lens/mask.fits']
+
+
+import pyfits,scipy,glob
+import matplotlib.path as path
+import sys
+
+coordfile = sys.argv[1]
+scifile = sys.argv[2]
+if len(sys.argv)>3:
+    maskfile = sys.argv[3]
+else:
+    maskfile = 'mask.fits'
+
+d = pyfits.open(scifile)[0].data.shape
+npts = d[0]*d[1]
+points = scipy.indices(d)[::-1].reshape((2,npts)).T + 1
+
+mask = scipy.zeros(d)
+f = open(coordfile).readlines()[1:]
+print f
+for poly in f:
+    print poly
+    verts = scipy.asarray(poly.split('{')[1].split('}')[0].split())
+    verts = verts.reshape((verts.size/2,2)).astype(scipy.float32)
+    mask += path.Path(verts).contains_points(points).T.reshape(d)
+
+mask[mask>1] = 1
+#pyfits.PrimaryHDU(mask).writeto(maskfile,clobber=True)
+
+
+#scifile = '/data/mauger/LENSES/SDSSJ1148+1930/SDSSJ1148_F110W_sci.fits'
+#coordfile = '/data/mauger/LENSES/SDSSJ1148+1930/mask.coords'
+# this creates a mask in which only the source remains. As this is what we want to model. So I need to generate a coords file?
+
+#python MakeMask.py '/data/mauger/LENSES/SDSSJ1148+1930/mask.coords' '/data/mauger/LENSES/SDSSJ1148+1930/SDSSJ1148_F110W_sci.fits' 'mask.fits'

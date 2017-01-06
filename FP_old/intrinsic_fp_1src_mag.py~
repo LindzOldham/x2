@@ -1,0 +1,99 @@
+import numpy as np, pylab as pl, pyfits as py, cPickle
+import pymc, myEmcee_blobs as myEmcee
+from astLib import astCalc
+from scipy.interpolate import splrep, splev
+
+dat = np.loadtxt('/data/ljo31b/EELs/sizemass/re_allflux.dat')
+r = dat[:,0]
+f = dat[:,1:]
+
+logSigma, mu, logRe, dlogSigma, dmu, dlogRe = np.load('/data/ljo31b/EELs/esi/kinematics/FP_EELs_mu.npy').T
+rho = np.load('/data/ljo31/Lens/LensParams/ReMu_covariances.npy')[:,3]
+
+sz = np.load('/data/ljo31/Lens/LensParams/SourceRedshiftsUpdated_1.00_lens_vdfit.npy')[()]
+names = sz.keys()
+names.sort()
+
+scales = np.array([astCalc.da(sz[name][0])*1e3*np.pi/180./3600. for name in names])
+Re=10**logRe
+dRe = dlogRe*Re
+mag = mu - 2.5*np.log10(2.*np.pi*Re**2.)
+
+fluxes = Re*0.
+for i in range(f.shape[1]):
+    model = splrep(r*0.05*scales[i], f[:,i]/np.max(f[:,i]))
+    fluxes[i] = splev(Re[i],model)
+
+pars, cov = [], []
+alpha = pymc.Uniform('alpha',-2.,3,1.0 )
+beta = pymc.Uniform('beta',-1.,1,0.3 )
+gamma = pymc.Uniform('gamma',-20.,20.,-6. )
+mux = pymc.Uniform('mu x',-0.5,1.0,0.3 )
+muy = pymc.Uniform('mu y',1.,30. )
+taux = pymc.Uniform('tau x',0,1,0.1 )
+tauy = pymc.Uniform('tau y',0,6,1.0 )
+sigma = pymc.Uniform('sigma',0,10,0.2 )
+pars = [alpha,beta,gamma,mux,muy,taux,tauy,sigma]
+cov += [1.,1.,1.,0.5,0.5,0.05,0.1,0.1]
+optCov = np.array(cov)
+
+
+@pymc.deterministic
+def logP(value=0.,p=pars):
+    logrfunc = alpha.value*logSigma + beta.value*mu + gamma.value
+    sigma2 = sigma.value**2. + dlogRe**2.
+    arg = (logRe -logrfunc)**2./sigma2 
+    s_arg = (logSigma - mux.value)**2. / taux.value**2.
+    m_arg = (mu-muy.value)**2. / tauy.value**2.
+    s_norm = (2.*np.pi*taux.value**2.)**0.5
+    m_norm = (2.*np.pi*tauy.value**2.)**0.5
+    norm = (2.*np.pi*sigma2)**0.5
+    prob = np.log(fluxes) - np.log(norm) - 0.5*arg - 0.5*s_arg - 0.5*m_arg - np.log(s_norm) - np.log(m_norm)
+    lp = prob.sum()
+    return lp
+
+@pymc.observed
+def likelihood(value=0.,lp=logP):
+    return lp
+
+S = myEmcee.Emcee(pars+[likelihood],cov=optCov,nthreads=1,nwalkers=80)
+S.sample(5000)
+outFile = '/data/ljo31b/EELs/FP/inference/FP_intrinsic_2src_mu'
+f = open(outFile,'wb')
+cPickle.dump(S.result(),f,2)
+f.close()
+result = S.result()
+#result = np.load(outFile)
+lp,trace,dic,_ = result
+a1,a2 = np.unravel_index(lp.argmax(),lp.shape)
+ftrace=trace.reshape((trace.shape[0]*trace.shape[1],trace.shape[2]))
+for i in range(len(pars)):
+    pars[i].value = trace[a1,a2,i]#np.percentile(ftrace[:,i],50,axis=0)
+    print "%18s  %8.5f"%(pars[i].__name__,pars[i].value)
+
+
+pl.figure()
+pl.plot(lp[100:])
+
+for key in dic.keys():
+    pl.figure()
+    pl.title(key)
+    pl.plot(dic[key])
+    pl.figure()
+    pl.hist(dic[key].ravel(),30)
+    pl.title(key)
+pl.show()
+
+pl.figure(figsize=(7,15))
+pl.subplot(311)
+pl.hist(dic['alpha'][3000:].ravel(),30)
+pl.title('alpha')
+pl.subplot(312)
+pl.hist(dic['beta'][3000:].ravel(),30)
+pl.title('beta')
+pl.subplot(313)
+pl.hist(dic['sigma'][3000:].ravel(),30)
+pl.title('sigma')
+#pl.savefig('/data/ljo31/public_html/Lens/phys_models/inference_new.png')
+pl.show()
+
